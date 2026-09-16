@@ -1,0 +1,26 @@
+# Python / Django
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+venv/
+env/
+*.sqlite3
+backend/.env
+
+# Django media (uploaded files) — usually you don't want to track these
+backend/media/
+
+# Node
+node_modules/
+frontend/.env
+frontend/dist/
+frontend/build/
+
+# Editor/OS junk
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
