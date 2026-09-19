@@ -7,7 +7,7 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("SECRET_KEY", "258036bm,")
+SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-8f3a9b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0")
 DEBUG = os.getenv("DEBUG", "False") == "True"
 ALLOWED_HOSTS = ["*"] if DEBUG else os.getenv("ALLOWED_HOSTS", "").split(",")
 
@@ -28,7 +28,7 @@ INSTALLED_APPS = [
     "apps.bookings",
     "apps.notifications",
     "apps.dashboard",
-    
+    "apps.payments",
 ]
 
 MIDDLEWARE = [
@@ -112,11 +112,22 @@ SIMPLE_JWT = {
 }
 
 CORS_ALLOWED_ORIGINS = os.getenv(
-    "CORS_ALLOWED_ORIGINS", "http://localhost:5173"
+    "CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:5174"
 ).split(",")
 
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 25 * 1024 * 1024
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# --- M-Pesa Daraja Configuration ---
+MPESA_CONSUMER_KEY = os.getenv("MPESA_CONSUMER_KEY")
+MPESA_CONSUMER_SECRET = os.getenv("MPESA_CONSUMER_SECRET")
+MPESA_SHORTCODE = os.getenv("MPESA_SHORTCODE", "174379")
+MPESA_PASSKEY = os.getenv("MPESA_PASSKEY")
+MPESA_CALLBACK_URL = os.getenv("MPESA_CALLBACK_URL")
+MPESA_ENV = os.getenv("MPESA_ENV", "sandbox")  # "sandbox" or "production"
+
+MPESA_BASE_URL = (
+    "https://sandbox.safaricom.co.ke"
+    if MPESA_ENV == "sandbox"
+    else "https://api.safaricom.co.ke"
+)

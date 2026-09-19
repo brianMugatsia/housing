@@ -166,7 +166,7 @@ export default function HouseDetails() {
         <div>
           <div className="sticky top-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
             <div className="border-b border-slate-100 pb-4">
-              <p className="text-xs font-medium text-slate-400">Monthly Rent</p>
+              <p className="text-xs font-medium text-slate-400">semester Rent</p>
               <p className="text-3xl font-bold text-slate-900">
                 KES {house.monthly_rent ? Number(house.monthly_rent).toLocaleString() : "5,000"}
               </p>

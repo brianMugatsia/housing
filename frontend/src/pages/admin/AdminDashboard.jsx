@@ -23,6 +23,17 @@ const PREDEFINED_REASONS = [
   "Duplicate listing submission",
 ];
 
+// Helper to determine single source of truth for status
+const getPropertyStatus = (prop) => {
+  if (prop.verification_status === "APPROVED" || prop.is_verified) {
+    return "APPROVED";
+  }
+  if (prop.verification_status === "REJECTED") {
+    return "REJECTED";
+  }
+  return "PENDING";
+};
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   
@@ -41,41 +52,56 @@ export default function AdminDashboard() {
   const [rejectingProp, setRejectingProp] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  // Memoized fetcher to keep state updates clean and mounted-safe
-  const fetchProperties = useCallback(async (isMounted = true) => {
+  const fetchProperties = useCallback(async () => {
     try {
       const res = await api.get("/admin/properties/");
       const rawData = Array.isArray(res.data) ? res.data : res.data?.results || [];
-      if (isMounted) setProperties(rawData);
+      setProperties(rawData);
     } catch {
       try {
         const altRes = await api.get("/properties/?all=true");
         const rawData = Array.isArray(altRes.data) ? altRes.data : altRes.data?.results || [];
-        if (isMounted) setProperties(rawData);
+        setProperties(rawData);
       } catch (fallbackErr) {
         console.error("Failed to fetch properties:", fallbackErr);
-        if (isMounted) setActionError("Failed to load properties. Please refresh.");
+        setActionError("Failed to load properties. Please refresh.");
       }
     } finally {
-      if (isMounted) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     let isMounted = true;
 
-    // Wrapped in an async IIFE so the effect body only starts the async
-    // task rather than directly invoking a function that calls setState.
-    (async () => {
-      await fetchProperties(isMounted);
-    })();
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const res = await api.get("/admin/properties/");
+        const rawData = Array.isArray(res.data) ? res.data : res.data?.results || [];
+        if (isMounted) setProperties(rawData);
+      } catch {
+        try {
+          const altRes = await api.get("/properties/?all=true");
+          const rawData = Array.isArray(altRes.data) ? altRes.data : altRes.data?.results || [];
+          if (isMounted) setProperties(rawData);
+        } catch (fallbackErr) {
+          console.error("Failed to fetch properties:", fallbackErr);
+          if (isMounted) setActionError("Failed to load properties. Please refresh.");
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadData();
 
     return () => {
       isMounted = false;
     };
-  }, [fetchProperties]);
+  }, []);
 
-  // Handle ESC key press for Lightbox Modal
+  // Handle ESC key press for Modals
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
@@ -90,21 +116,15 @@ export default function AdminDashboard() {
   const handleManualRefresh = () => {
     setLoading(true);
     setActionError("");
-    fetchProperties(true);
+    fetchProperties();
   };
 
   // Filtered Properties Logic
   const filteredProperties = useMemo(() => {
     return properties.filter((prop) => {
       // Tab Filter
-      const statusMatches =
-        activeTab === "PENDING"
-          ? prop.verification_status === "PENDING_VERIFICATION" || !prop.verification_status
-          : activeTab === "APPROVED"
-          ? prop.verification_status === "APPROVED" || prop.is_verified
-          : prop.verification_status === "REJECTED";
-
-      if (!statusMatches) return false;
+      const status = getPropertyStatus(prop);
+      if (status !== activeTab) return false;
 
       // Search Filter
       if (!searchTerm.trim()) return true;
@@ -113,6 +133,7 @@ export default function AdminDashboard() {
       const townMatch = prop.town?.toLowerCase().includes(term);
       const countyMatch = prop.county?.toLowerCase().includes(term);
       const typeMatch = prop.property_type?.toLowerCase().includes(term);
+      
       const landlordMatch = 
         typeof prop.landlord === "object" 
           ? prop.landlord?.full_name?.toLowerCase().includes(term) || prop.landlord?.email?.toLowerCase().includes(term)
@@ -124,11 +145,16 @@ export default function AdminDashboard() {
 
   // Counts computed dynamically across dataset
   const counts = useMemo(() => {
-    return {
-      pending: properties.filter(p => p.verification_status === "PENDING_VERIFICATION" || !p.verification_status).length,
-      approved: properties.filter(p => p.verification_status === "APPROVED" || p.is_verified).length,
-      rejected: properties.filter(p => p.verification_status === "REJECTED").length,
-    };
+    return properties.reduce(
+      (acc, prop) => {
+        const status = getPropertyStatus(prop);
+        if (status === "APPROVED") acc.approved += 1;
+        else if (status === "REJECTED") acc.rejected += 1;
+        else acc.pending += 1;
+        return acc;
+      },
+      { pending: 0, approved: 0, rejected: 0 }
+    );
   }, [properties]);
 
   const handleApprove = async (id) => {
@@ -202,7 +228,7 @@ export default function AdminDashboard() {
         <button
           onClick={handleManualRefresh}
           disabled={loading}
-          className="flex items-center gap-2 self-start md:self-auto px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+          className="flex items-center gap-2 self-start md:self-auto px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin text-slate-400" : ""}`} />
           Refresh
@@ -213,7 +239,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <button
           onClick={() => setActiveTab("PENDING")}
-          className={`flex items-center justify-between rounded-xl p-5 border text-left transition-all ${
+          className={`flex items-center justify-between rounded-xl p-5 border text-left transition-all cursor-pointer ${
             activeTab === "PENDING"
               ? "border-amber-500 bg-amber-50/50 ring-2 ring-amber-500/20"
               : "border-slate-200 bg-white hover:border-slate-300"
@@ -230,7 +256,7 @@ export default function AdminDashboard() {
 
         <button
           onClick={() => setActiveTab("APPROVED")}
-          className={`flex items-center justify-between rounded-xl p-5 border text-left transition-all ${
+          className={`flex items-center justify-between rounded-xl p-5 border text-left transition-all cursor-pointer ${
             activeTab === "APPROVED"
               ? "border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-500/20"
               : "border-slate-200 bg-white hover:border-slate-300"
@@ -247,7 +273,7 @@ export default function AdminDashboard() {
 
         <button
           onClick={() => setActiveTab("REJECTED")}
-          className={`flex items-center justify-between rounded-xl p-5 border text-left transition-all ${
+          className={`flex items-center justify-between rounded-xl p-5 border text-left transition-all cursor-pointer ${
             activeTab === "REJECTED"
               ? "border-red-500 bg-red-50/50 ring-2 ring-red-500/20"
               : "border-slate-200 bg-white hover:border-slate-300"
@@ -305,149 +331,153 @@ export default function AdminDashboard() {
         </div>
       ) : (
         <div className="space-y-6">
-          {filteredProperties.map((prop) => (
-            <div
-              key={prop.id}
-              className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden hover:border-slate-300 transition-all"
-            >
-              <div className="p-6">
-                {/* Header Info */}
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-xl font-bold text-slate-900">{prop.title}</h2>
-                      <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
-                        {prop.property_type || "Apartment"}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500 mt-1">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                        {prop.town}, {prop.county}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <User className="h-3.5 w-3.5 text-slate-400" />
-                        {renderLandlordName(prop.landlord)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <GraduationCap className="h-3.5 w-3.5 text-slate-400" />
-                        Near {renderUniversityName(prop.university)}
-                      </span>
-                    </div>
-                  </div>
+          {filteredProperties.map((prop) => {
+            const status = getPropertyStatus(prop);
 
-                  <span
-                    className={`self-start px-3 py-1 text-xs font-semibold rounded-full ${
-                      prop.verification_status === "APPROVED" || prop.is_verified
-                        ? "bg-emerald-100 text-emerald-800"
-                        : prop.verification_status === "REJECTED"
-                        ? "bg-red-100 text-red-800"
-                        : "bg-amber-100 text-amber-800"
-                    }`}
-                  >
-                    {prop.verification_status === "APPROVED" || prop.is_verified
-                      ? "Approved"
-                      : prop.verification_status === "REJECTED"
-                      ? "Rejected"
-                      : "Pending Review"}
-                  </span>
-                </div>
-
-                {/* Photos Gallery Horizontal Scroll */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Uploaded Photos ({prop.images?.length || 0})
-                    </h3>
-                    <span className="text-xs text-slate-400">Click photo to enlarge</span>
-                  </div>
-
-                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
-                    {prop.images && prop.images.length > 0 ? (
-                      prop.images.map((img, index) => {
-                        const imgSrc = typeof img === "string" ? img : img.image;
-                        return (
-                          <div
-                            key={img.id || index}
-                            onClick={() => setPreviewImage(imgSrc)}
-                            className="group relative h-28 w-40 flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
-                          >
-                            <img
-                              src={imgSrc}
-                              alt={`Property visual ${index + 1}`}
-                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                            />
-                            <div className="absolute inset-0 bg-black/30 opacity-0 transition-opacity group-hover:opacity-100 flex items-center justify-center">
-                              <Maximize2 className="h-5 w-5 text-white" />
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-sm text-slate-400 italic">
-                        No image assets uploaded for this property.
+            return (
+              <div
+                key={prop.id}
+                className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden hover:border-slate-300 transition-all"
+              >
+                <div className="p-6">
+                  {/* Header Info */}
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-slate-900">{prop.title}</h2>
+                        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
+                          {prop.property_type || "Apartment"}
+                        </span>
                       </div>
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500 mt-1">
+                        <span className="flex items-center gap-1">
+                          <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                          {prop.town}, {prop.county}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <User className="h-3.5 w-3.5 text-slate-400" />
+                          {renderLandlordName(prop.landlord)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <GraduationCap className="h-3.5 w-3.5 text-slate-400" />
+                          Near {renderUniversityName(prop.university)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`self-start px-3 py-1 text-xs font-semibold rounded-full ${
+                        status === "APPROVED"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : status === "REJECTED"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-amber-100 text-amber-800"
+                      }`}
+                    >
+                      {status === "APPROVED"
+                        ? "Approved"
+                        : status === "REJECTED"
+                        ? "Rejected"
+                        : "Pending Review"}
+                    </span>
+                  </div>
+
+                  {/* Photos Gallery Horizontal Scroll */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        Uploaded Photos ({prop.images?.length || 0})
+                      </h3>
+                      <span className="text-xs text-slate-400">Click photo to enlarge</span>
+                    </div>
+
+                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+                      {prop.images && prop.images.length > 0 ? (
+                        prop.images.map((img, index) => {
+                          const imgSrc = typeof img === "string" ? img : img.image;
+                          return (
+                            <div
+                              key={img.id || index}
+                              onClick={() => setPreviewImage(imgSrc)}
+                              className="group relative h-28 w-40 flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+                            >
+                              <img
+                                src={imgSrc}
+                                alt={`Property visual ${index + 1}`}
+                                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              />
+                              <div className="absolute inset-0 bg-black/30 opacity-0 transition-opacity group-hover:opacity-100 flex items-center justify-center">
+                                <Maximize2 className="h-5 w-5 text-white" />
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-sm text-slate-400 italic">
+                          No image assets uploaded for this property.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Property Meta Specs */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg text-sm mb-4 border border-slate-100">
+                    <div>
+                      <span className="block text-xs font-medium text-slate-400">Monthly Rent</span>
+                      <span className="text-base font-bold text-slate-900">{formatKES(prop.monthly_rent)}</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-medium text-slate-400">Available Rooms</span>
+                      <span className="font-semibold text-slate-800">{prop.available_rooms || 0} Units</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-medium text-slate-400">Total Units</span>
+                      <span className="font-semibold text-slate-800">{prop.total_rooms || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-medium text-slate-400">Deposit Requirement</span>
+                      <span className="font-semibold text-slate-800">
+                        {prop.deposit ? formatKES(prop.deposit) : "None"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Rejection Note Display */}
+                  {prop.rejection_reason && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
+                      <strong className="font-semibold">Rejection Note: </strong> {prop.rejection_reason}
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+                    {status !== "REJECTED" && (
+                      <button
+                        onClick={() => {
+                          setRejectingProp(prop);
+                          setRejectReason("");
+                        }}
+                        disabled={processingId === prop.id}
+                        className="px-4 py-2 border border-red-300 text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                      >
+                        Reject
+                      </button>
+                    )}
+
+                    {status !== "APPROVED" && (
+                      <button
+                        onClick={() => handleApprove(prop.id)}
+                        disabled={processingId === prop.id}
+                        className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-600 cursor-pointer"
+                      >
+                        {processingId === prop.id ? "Processing..." : "Approve Listing"}
+                      </button>
                     )}
                   </div>
                 </div>
-
-                {/* Property Meta Specs */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg text-sm mb-4 border border-slate-100">
-                  <div>
-                    <span className="block text-xs font-medium text-slate-400">Monthly Rent</span>
-                    <span className="text-base font-bold text-slate-900">{formatKES(prop.monthly_rent)}</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs font-medium text-slate-400">Available Rooms</span>
-                    <span className="font-semibold text-slate-800">{prop.available_rooms || 0} Units</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs font-medium text-slate-400">Total Units</span>
-                    <span className="font-semibold text-slate-800">{prop.total_rooms || "N/A"}</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs font-medium text-slate-400">Deposit Requirement</span>
-                    <span className="font-semibold text-slate-800">
-                      {prop.deposit_amount ? formatKES(prop.deposit_amount) : "None"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Rejection Note Display */}
-                {prop.rejection_reason && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
-                    <strong className="font-semibold">Rejection Note: </strong> {prop.rejection_reason}
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
-                  {prop.verification_status !== "REJECTED" && (
-                    <button
-                      onClick={() => {
-                        setRejectingProp(prop);
-                        setRejectReason("");
-                      }}
-                      disabled={processingId === prop.id}
-                      className="px-4 py-2 border border-red-300 text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
-                    >
-                      Reject
-                    </button>
-                  )}
-
-                  {prop.verification_status !== "APPROVED" && !prop.is_verified && (
-                    <button
-                      onClick={() => handleApprove(prop.id)}
-                      disabled={processingId === prop.id}
-                      className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                    >
-                      {processingId === prop.id ? "Processing..." : "Approve Listing"}
-                    </button>
-                  )}
-                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -463,7 +493,7 @@ export default function AdminDashboard() {
           >
             <button
               onClick={() => setPreviewImage(null)}
-              className="absolute -top-10 right-0 text-white hover:text-slate-300 p-2 focus:outline-none"
+              className="absolute -top-10 right-0 text-white hover:text-slate-300 p-2 focus:outline-none cursor-pointer"
               aria-label="Close image preview"
             >
               <X className="h-6 w-6" />
@@ -489,7 +519,7 @@ export default function AdminDashboard() {
           >
             <div className="p-6 border-b border-slate-100 flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-900">Reject Property Listing</h3>
-              <button onClick={() => setRejectingProp(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setRejectingProp(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -510,7 +540,7 @@ export default function AdminDashboard() {
                       key={reason}
                       type="button"
                       onClick={() => setRejectReason(reason)}
-                      className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
+                      className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors cursor-pointer ${
                         rejectReason === reason
                           ? "bg-red-50 border-red-300 text-red-700 font-semibold"
                           : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
@@ -540,14 +570,14 @@ export default function AdminDashboard() {
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
               <button
                 onClick={() => setRejectingProp(null)}
-                className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+                className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmReject}
                 disabled={processingId === rejectingProp.id}
-                className="px-4 py-2 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+                className="px-4 py-2 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 cursor-pointer"
               >
                 {processingId === rejectingProp.id ? "Rejecting..." : "Confirm Rejection"}
               </button>

@@ -1,15 +1,23 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
-  Building, 
+   
   MapPin, 
   CheckCircle2, 
   AlertCircle, 
   ArrowLeft,
-  ShieldCheck,
-  
+  ShieldCheck
 } from "lucide-react";
 import api from "../../services/api";
+
+// Maps the stored duration_months value to how many semesters that represents,
+// so total price = semester rent * semesters. Adjust the "12" mapping if your
+// academic calendar uses 2 semesters/year instead of 3 trimesters/year.
+const DURATION_OPTIONS = [
+  { value: "3", label: "1 Semester", semesters: 1 },
+  { value: "6", label: "2 Semesters", semesters: 2 },
+  { value: "12", label: "1 Full Academic Year", semesters: 3 },
+];
 
 export default function BookingPage() {
   const { houseId } = useParams();
@@ -40,7 +48,7 @@ export default function BookingPage() {
           setProperty(res.data);
         }
       } catch (err) {
-        console.error("Failed to fetch house details:", err);
+        console.error("Failed to fetch property details:", err);
         setError("Could not load property details. Please try again.");
       } finally {
         if (isMounted) setLoading(false);
@@ -55,6 +63,45 @@ export default function BookingPage() {
       isMounted = false;
     };
   }, [houseId]);
+
+  // Read landlord's selections
+  const getAvailableRooms = () => {
+    if (!property) return [];
+
+    let raw = property.available_room_numbers || property.room_numbers || [];
+
+    // Parse JSON string if sent as a raw string
+    if (typeof raw === "string") {
+      try {
+        raw = JSON.parse(raw);
+      } catch {
+        raw = raw.split(",").map((s) => s.trim());
+      }
+    }
+
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((room) => {
+        const strVal = String(room).trim();
+        const hasPrefix = /^(room|house|unit|apt|apartment|flat)\b/i.test(strVal);
+        return {
+          value: strVal,
+          label: hasPrefix ? strVal : `Room ${strVal}`,
+        };
+      });
+    }
+
+    return [];
+  };
+
+  const availableRoomsList = getAvailableRooms();
+
+  // Live price calculation based on selected duration
+  const selectedDuration = DURATION_OPTIONS.find(
+    (d) => d.value === formData.duration_months
+  ) || DURATION_OPTIONS[0];
+
+  const semesterRent = Number(property?.monthly_rent) || 0;
+  const totalRentDue = semesterRent * selectedDuration.semesters;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -76,16 +123,15 @@ export default function BookingPage() {
       }, 2000);
     } catch (err) {
       console.error("Booking error:", err);
-      
       const serverError = err.response?.data;
       if (typeof serverError === "object" && serverError !== null) {
         const firstKey = Object.keys(serverError)[0];
         const msg = Array.isArray(serverError[firstKey])
           ? serverError[firstKey][0]
           : serverError[firstKey];
-        setError(msg || "Failed to submit booking request. Please check your inputs.");
+        setError(msg || "Failed to submit booking request.");
       } else {
-        setError("Failed to submit booking request. Please check your inputs.");
+        setError("Failed to submit booking request.");
       }
     } finally {
       setSubmitting(false);
@@ -95,7 +141,7 @@ export default function BookingPage() {
   if (loading) {
     return (
       <div className="py-20 text-center text-slate-500">
-        Loading booking details...
+        Loading property details...
       </div>
     );
   }
@@ -129,28 +175,43 @@ export default function BookingPage() {
                 <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" />
                 <h3 className="mt-2 text-lg font-bold text-emerald-900">Request Submitted!</h3>
                 <p className="mt-1 text-sm text-emerald-700">
-                  Your booking request has been sent. Redirecting to your dashboard...
+                  Your request was sent. Redirecting...
                 </p>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-                {/* House / Room Number Field */}
                 <div>
                   <label className="block text-xs font-semibold uppercase text-slate-600 mb-1.5">
-                    House / Room Number
+                    Select House / Room Number
                   </label>
-                  <div className="relative">
-                    <input
-                      type="text"
+                  {availableRoomsList.length > 0 ? (
+                    <select
                       required
-                      placeholder="e.g., House 4B, Room 12, or Door A"
                       value={formData.house_number}
                       onChange={(e) =>
                         setFormData({ ...formData, house_number: e.target.value })
                       }
-                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-slate-900 bg-white"
+                    >
+                      <option value="">-- Choose an available unit --</option>
+                      {availableRoomsList.map((room) => (
+                        <option key={room.value} value={room.value}>
+                          {room.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g., Room 26"
+                      value={formData.house_number}
+                      onChange={(e) =>
+                        setFormData({ ...formData, house_number: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-slate-900"
                     />
-                  </div>
+                  )}
                 </div>
 
                 <div>
@@ -165,7 +226,7 @@ export default function BookingPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, move_in_date: e.target.value })
                     }
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-slate-900"
                   />
                 </div>
 
@@ -178,26 +239,35 @@ export default function BookingPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, duration_months: e.target.value })
                     }
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-slate-900 bg-white"
                   >
-                    <option value="3">3 Months (Semester)</option>
-                    <option value="6">6 Months (Half Year)</option>
-                    <option value="12">12 Months (Full Academic Year)</option>
+                    {DURATION_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    {selectedDuration.semesters} semester{selectedDuration.semesters > 1 ? "s" : ""} at KES{" "}
+                    {semesterRent.toLocaleString()} each ={" "}
+                    <span className="font-semibold text-slate-700">
+                      KES {totalRentDue.toLocaleString()} total
+                    </span>
+                  </p>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold uppercase text-slate-600 mb-1.5">
-                    Additional Notes for Landlord (Optional)
+                    Notes for Landlord (Optional)
                   </label>
                   <textarea
                     rows={3}
-                    placeholder="Mention any specific room requests, roommate choices, or queries..."
+                    placeholder="Mention specific room requests or questions..."
                     value={formData.notes}
                     onChange={(e) =>
                       setFormData({ ...formData, notes: e.target.value })
                     }
-                    className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                    className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-slate-900"
                   />
                 </div>
 
@@ -217,20 +287,8 @@ export default function BookingPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-base font-bold text-slate-900 mb-4">Property Summary</h2>
             
-            {property ? (
+            {property && (
               <div className="space-y-4">
-                {property.images && property.images.length > 0 ? (
-                  <img
-                    src={property.images[0].image}
-                    alt={property.title}
-                    className="h-40 w-full object-cover rounded-xl border border-slate-100"
-                  />
-                ) : (
-                  <div className="flex h-32 w-full items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-                    <Building className="h-8 w-8" />
-                  </div>
-                )}
-
                 <div>
                   <h3 className="font-bold text-slate-900 text-base">{property.title}</h3>
                   <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
@@ -242,7 +300,7 @@ export default function BookingPage() {
                 <div className="border-t border-b border-slate-100 py-3 space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Property Type</span>
-                    <span className="font-semibold text-slate-800 uppercase">
+                    <span className="font-semibold text-slate-800">
                       {property.property_type?.replace("_", " ")}
                     </span>
                   </div>
@@ -253,20 +311,24 @@ export default function BookingPage() {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Monthly Rent</span>
+                    <span className="text-slate-500">Rent / Semester</span>
+                    <span className="font-semibold text-slate-800">
+                      KES {semesterRent.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-slate-100">
+                    <span className="text-slate-600 font-semibold">Total Due</span>
                     <span className="font-bold text-emerald-600 text-sm">
-                      KES {property.monthly_rent?.toLocaleString()}
+                      KES {totalRentDue.toLocaleString()}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 p-3 rounded-xl">
                   <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>No payment required until landlord approves your request.</span>
+                  <span>No payment required until approval.</span>
                 </div>
               </div>
-            ) : (
-              <p className="text-sm text-slate-500">Property information unavailable.</p>
             )}
           </div>
         </div>

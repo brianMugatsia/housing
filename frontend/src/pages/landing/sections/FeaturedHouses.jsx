@@ -95,7 +95,7 @@ export default function FeaturedHouses() {
                   </div>
                   <p className="mt-2.5 font-bold text-primary">
                     KES {house.monthly_rent ? Number(house.monthly_rent).toLocaleString() : "N/A"}
-                    <span className="ml-1 text-xs font-medium text-slate-400">/mo</span>
+                    <span className="ml-1 text-xs font-medium text-slate-400">/sem</span>
                   </p>
                 </div>
               </Card>

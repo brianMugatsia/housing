@@ -56,7 +56,7 @@ export default function PropertyCard({ property, variant = "public" }) {
         )}
 
         <div className="mt-3 flex items-center justify-between">
-          <p className="font-bold text-primary">KES {Number(property.monthly_rent).toLocaleString()}/mo</p>
+          <p className="font-bold text-primary">KES {Number(property.monthly_rent).toLocaleString()}/sem</p>
           <p className="text-xs text-slate-500">{property.available_rooms} available</p>
         </div>
 

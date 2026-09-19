@@ -8,7 +8,8 @@ import {
   MapPin, 
   CheckCircle2, 
   XCircle, 
-  AlertCircle 
+  AlertCircle,
+  ArrowRight
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
@@ -47,10 +48,21 @@ export default function StudentDashboard() {
   const getStatusBadge = (status) => {
     switch (status?.toUpperCase()) {
       case "APPROVED":
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+            <CheckCircle2 className="h-3 w-3" /> Approved (Deposit Due)
+          </span>
+        );
+      case "DEPOSIT_PAID":
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
+            <CheckCircle2 className="h-3 w-3" /> Deposit Paid (Rent Due)
+          </span>
+        );
       case "CONFIRMED":
         return (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-            <CheckCircle2 className="h-3 w-3" /> Confirmed
+            <CheckCircle2 className="h-3 w-3" /> Fully Confirmed
           </span>
         );
       case "PENDING":
@@ -73,6 +85,32 @@ export default function StudentDashboard() {
           </span>
         );
     }
+  };
+
+  const renderPaymentButton = (booking) => {
+    if (booking.status === "APPROVED") {
+      return (
+        <Link
+          to={`/pay/${booking.id}`}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+        >
+          Pay Deposit <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      );
+    }
+
+    if (booking.status === "DEPOSIT_PAID") {
+      return (
+        <Link
+          to={`/pay/${booking.id}`}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700"
+        >
+          Pay Rent <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -105,7 +143,7 @@ export default function StudentDashboard() {
             <div>
               <p className="text-xs text-slate-500">Active Bookings</p>
               <p className="text-xl font-bold text-slate-900">
-                {bookings.filter((b) => b.status === "APPROVED" || b.status === "CONFIRMED").length}
+                {bookings.filter((b) => ["APPROVED", "DEPOSIT_PAID", "CONFIRMED"].includes(b.status)).length}
               </p>
             </div>
           </div>
@@ -163,7 +201,6 @@ export default function StudentDashboard() {
         ) : (
           <div className="divide-y divide-slate-100">
             {bookings.map((booking) => {
-              // Extract property object or fallback to flat fields
               const prop = booking.property_details || (typeof booking.property === "object" ? booking.property : {});
               const propId = prop.id || (typeof booking.property !== "object" ? booking.property : null);
               
@@ -195,13 +232,15 @@ export default function StudentDashboard() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-4 sm:justify-end">
-                      <div className="text-right sm:text-right">
-                        <p className="text-xs text-slate-400">Monthly Rent</p>
+                    <div className="flex items-center justify-between gap-3 sm:justify-end">
+                      <div className="text-left sm:text-right">
+                        <p className="text-xs text-slate-400">Semester Rent</p>
                         <p className="text-sm font-bold text-slate-900">
                           {rent ? `KES ${Number(rent).toLocaleString()}` : "KES N/A"}
                         </p>
                       </div>
+
+                      {renderPaymentButton(booking)}
 
                       {propId && (
                         <Link

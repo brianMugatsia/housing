@@ -31,5 +31,18 @@ export const deletePropertyImage = (propertyId, imageId) =>
 export const listAmenities = () =>
   api.get("/amenities/").then((r) => r.data.results || r.data);
 
+export const listUniversities = () =>
+  api.get("/universities/").then((r) => r.data.results || r.data);
+
 export const listMyProperties = () =>
   api.get("/properties/", { params: { mine: "true" } }).then((r) => r.data);
+
+export const vacateBooking = (bookingId) =>
+  api.post(`/bookings/${bookingId}/vacate/`).then((r) => r.data);
+
+export const shiftRoom = (bookingId, newHouseNumber) =>
+  api
+    .patch(`/bookings/${bookingId}/shift-room/`, {
+      new_house_number: newHouseNumber,
+    })
+    .then((r) => r.data);

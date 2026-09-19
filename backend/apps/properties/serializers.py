@@ -1,3 +1,4 @@
+import json
 from django.db import transaction
 from rest_framework import serializers
 
@@ -60,6 +61,7 @@ class PropertySerializer(serializers.ModelSerializer):
             "deposit",
             "total_rooms",
             "available_rooms",
+            "available_room_numbers",
             "gender_restriction",
             "amenities",
             "images",
@@ -71,13 +73,8 @@ class PropertySerializer(serializers.ModelSerializer):
 
 
 class PropertyWriteSerializer(serializers.ModelSerializer):
-    amenity_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Amenity.objects.all(),
-        many=True,
-        write_only=True,
-        required=False,
-        source="amenities",
-    )
+    amenities = serializers.CharField(write_only=True, required=False)
+    available_room_numbers = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = Property
@@ -99,9 +96,36 @@ class PropertyWriteSerializer(serializers.ModelSerializer):
             "deposit",
             "total_rooms",
             "available_rooms",
+            "available_room_numbers",
             "gender_restriction",
-            "amenity_ids",
+            "amenities",
         ]
+
+    def validate_available_room_numbers(self, value):
+        if not value:
+            return []
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    def validate_amenities(self, value):
+        if not value:
+            return []
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
 
     def validate(self, data):
         total = data.get("total_rooms", getattr(self.instance, "total_rooms", None))
@@ -114,21 +138,34 @@ class PropertyWriteSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        # Extract amenities because M2M relationships cannot be created via objects.create()
-        amenities = validated_data.pop("amenities", [])
+        amenity_names = validated_data.pop("amenities", [])
         request = self.context["request"]
 
-        # Ensure landlord is attached automatically
+        # 1. Create property object
         property_obj = Property.objects.create(landlord=request.user, **validated_data)
 
-        if amenities:
-            property_obj.amenities.set(amenities)
+        # 2. Attach Amenities via M2M mapping
+        if amenity_names:
+            amenity_instances = []
+            for name in amenity_names:
+                amenity_obj, _ = Amenity.objects.get_or_create(name=name.strip())
+                amenity_instances.append(amenity_obj)
+            property_obj.amenities.set(amenity_instances)
+
+        # 3. Handle multipart images passed during creation
+        uploaded_images = request.FILES.getlist("uploaded_images") or request.FILES.getlist("images")
+        for i, file_obj in enumerate(uploaded_images):
+            PropertyImage.objects.create(
+                property=property_obj,
+                image=file_obj,
+                is_primary=(i == 0)
+            )
 
         return property_obj
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        amenities = validated_data.pop("amenities", None)
+        amenity_names = validated_data.pop("amenities", None)
 
         critical_fields = {
             "monthly_rent",
@@ -156,8 +193,12 @@ class PropertyWriteSerializer(serializers.ModelSerializer):
 
         instance.save()
 
-        if amenities is not None:
-            instance.amenities.set(amenities)
+        if amenity_names is not None:
+            amenity_instances = []
+            for name in amenity_names:
+                amenity_obj, _ = Amenity.objects.get_or_create(name=name.strip())
+                amenity_instances.append(amenity_obj)
+            instance.amenities.set(amenity_instances)
 
         return instance
 

@@ -2,13 +2,17 @@ from django.conf import settings
 from django.db import models
 from apps.properties.models import Property
 
+
 class Booking(models.Model):
     STATUS_CHOICES = (
         ('PENDING', 'Pending'),
         ('APPROVED', 'Approved'),
+        ('DEPOSIT_PAID', 'Deposit Paid'),
         ('CONFIRMED', 'Confirmed'),
         ('CANCELLED', 'Cancelled'),
         ('REJECTED', 'Rejected'),
+        ('VACATED', 'Vacated'),
+        ('RELOCATED', 'Relocated'),
     )
 
     student = models.ForeignKey(

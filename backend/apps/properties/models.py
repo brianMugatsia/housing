@@ -55,11 +55,11 @@ class Property(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField()
     property_type = models.CharField(max_length=20, choices=PropertyType.choices)
-    room_type = models.CharField(max_length=20, choices=RoomType.choices)
+    room_type = models.CharField(max_length=20, choices=RoomType.choices, default=RoomType.SINGLE_OCCUPANCY)
 
     county = models.CharField(max_length=100)
     town = models.CharField(max_length=100)
-    area = models.CharField(max_length=150)
+    area = models.CharField(max_length=150, blank=True)
     address = models.CharField(max_length=255, blank=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -72,6 +72,10 @@ class Property(models.Model):
     deposit = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], default=0)
     total_rooms = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     available_rooms = models.PositiveIntegerField(validators=[MinValueValidator(0)])
+    
+    # Store dynamic unit numbers selected by landlord
+    available_room_numbers = models.JSONField(default=list, blank=True)
+
     gender_restriction = models.CharField(
         max_length=20, choices=GenderRestriction.choices, default=GenderRestriction.NONE
     )

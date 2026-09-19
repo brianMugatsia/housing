@@ -1,64 +1,81 @@
-import { useEffect, useState } from "react";
-import { UserCheck, LogOut, ArrowRightLeft } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { UserCheck, LogOut, ArrowRightLeft, AlertCircle } from "lucide-react";
 import Card from "../../components/ui/Card";
 import api from "../../services/api";
+import { vacateBooking, shiftRoom } from "../../services/properties";
 
 export default function LandlordDashboard() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
+  // Function for manual re-fetching (e.g. after vacating or shifting rooms)
+  const fetchDashboardData = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const bookingsRes = await api.get("/bookings/");
+      const data = bookingsRes.data.results || bookingsRes.data || [];
+      setBookings(data);
+    } catch (err) {
+      console.error("Failed to load dashboard data:", err);
+      setError("Unable to load active bookings.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Safe initial data load on mount (prevents synchronous state updates in effect body)
   useEffect(() => {
-    let isMounted = true;
+    let ignore = false;
 
-    const fetchDashboardData = async () => {
+    const loadInitialData = async () => {
       try {
         const bookingsRes = await api.get("/bookings/");
-        if (isMounted) {
-          setBookings(bookingsRes.data.results || bookingsRes.data || []);
+        if (!ignore) {
+          const data = bookingsRes.data.results || bookingsRes.data || [];
+          setBookings(data);
         }
       } catch (err) {
-        console.error("Failed to load dashboard data:", err);
+        if (!ignore) {
+          console.error("Failed to load dashboard data:", err);
+          setError("Unable to load active bookings.");
+        }
       } finally {
-        if (isMounted) {
+        if (!ignore) {
           setLoading(false);
         }
       }
     };
 
-    fetchDashboardData();
+    loadInitialData();
 
     return () => {
-      isMounted = false;
+      ignore = true;
     };
   }, []);
 
-  // Case 1: Handle complete checkout/vacate
   const handleVacate = async (bookingId) => {
     if (!window.confirm("Confirm tenant checkout? This will free up 1 available unit.")) return;
     try {
-      await api.post(`/bookings/${bookingId}/vacate/`);
-      const bookingsRes = await api.get("/bookings/");
-      setBookings(bookingsRes.data.results || bookingsRes.data || []);
+      await vacateBooking(bookingId);
+      await fetchDashboardData();
     } catch (err) {
       console.error("Failed to process checkout:", err);
-      alert("Failed to process checkout.");
+      alert(err.response?.data?.error || "Failed to process checkout.");
     }
   };
 
-  // Case 2: Handle room shift
   const handleShiftRoom = async (bookingId, currentRoom) => {
     const newRoom = window.prompt("Enter new room/house number:", currentRoom);
     if (!newRoom || newRoom === currentRoom) return;
 
     try {
-      await api.patch(`/bookings/${bookingId}/shift-room/`, {
-        new_house_number: newRoom,
-      });
-      const bookingsRes = await api.get("/bookings/");
-      setBookings(bookingsRes.data.results || bookingsRes.data || []);
+      await shiftRoom(bookingId, newRoom);
+      await fetchDashboardData();
     } catch (err) {
       console.error("Failed to update room number:", err);
-      alert("Failed to update room number.");
+      alert(err.response?.data?.error || "Failed to update room number.");
     }
   };
 
@@ -66,29 +83,29 @@ export default function LandlordDashboard() {
     (b) => b.status === "APPROVED" || b.status === "CONFIRMED"
   );
 
-  const monthlyRevenue = activeTenants.reduce((acc, booking) => {
+  const semesterRevenue = activeTenants.reduce((acc, booking) => {
     return acc + Number(booking.property_details?.monthly_rent || 0);
   }, 0);
 
-  // Helper function to format currency in Kenya Shillings (KES)
   const formatKES = (amount) => {
     return `KSh ${Number(amount).toLocaleString("en-KE")}`;
   };
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-6 lg:p-8">
-      {/* Active Tenants Section */}
       <Card className="p-6">
         <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <UserCheck className="h-5 w-5 text-emerald-600" />
             <h2 className="text-lg font-semibold text-slate-900">Active Tenants</h2>
           </div>
-          
-          <div className="flex items-center gap-4">
-            {/* Total Monthly Revenue Card / Badge */}
+
+          <div className="flex flex-wrap items-center gap-3">
             <div className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 border border-emerald-200">
-              Total Monthly Revenue: <span className="text-sm font-bold text-emerald-700">{formatKES(monthlyRevenue)}</span>
+              Total Semester Revenue:{" "}
+              <span className="text-sm font-bold text-emerald-700">
+                {formatKES(semesterRevenue)}
+              </span>
             </div>
 
             <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
@@ -96,6 +113,13 @@ export default function LandlordDashboard() {
             </span>
           </div>
         </div>
+
+        {error && (
+          <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-xs text-red-700">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
         {loading ? (
           <div className="py-8 text-center text-sm text-slate-500">Loading active tenants...</div>
@@ -121,10 +145,10 @@ export default function LandlordDashboard() {
                 {activeTenants.map((booking) => (
                   <tr key={booking.id} className="hover:bg-slate-50/50">
                     <td className="px-4 py-3 font-semibold text-slate-900">
-                      {booking.student_name || booking.student_details?.full_name || "Student Tenant"}
+                      {booking.student_name || "Student Tenant"}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-700">
-                      {booking.student_phone || booking.student_details?.phone_number || "N/A"}
+                      {booking.student_phone || "N/A"}
                     </td>
                     <td className="px-4 py-3">
                       {booking.property_details?.title || `Property #${booking.property}`}
@@ -140,19 +164,17 @@ export default function LandlordDashboard() {
                     <td className="px-4 py-3">{booking.move_in_date}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {/* Shift Room Action */}
                         <button
                           onClick={() => handleShiftRoom(booking.id, booking.house_number)}
-                          className="flex items-center gap-1 rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
+                          className="flex items-center gap-1 rounded bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors"
                           title="Shift Room"
                         >
                           <ArrowRightLeft className="h-3.5 w-3.5" /> Shift
                         </button>
 
-                        {/* Vacate/Checkout Action */}
                         <button
                           onClick={() => handleVacate(booking.id)}
-                          className="flex items-center gap-1 rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                          className="flex items-center gap-1 rounded bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors"
                           title="Vacate Property"
                         >
                           <LogOut className="h-3.5 w-3.5" /> Vacate

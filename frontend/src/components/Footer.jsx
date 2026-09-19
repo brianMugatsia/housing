@@ -28,31 +28,31 @@ const columns = [
 
 export default function Footer() {
   return (
-    <footer className="border-t border-gray-100 bg-white">
+    <footer className="border-t border-gray-100 bg-primary">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
           <div className="col-span-2">
-            <div className="flex items-center gap-2 text-lg font-bold text-primary">
+            <div className="flex items-center gap-2 text-lg font-bold text-white">
               <Home className="h-6 w-6" />
               HomeFind
             </div>
-            <p className="mt-3 max-w-xs text-sm text-slate-500">
+            <p className="mt-3 max-w-xs text-sm text-slate-500 text-white">
               Find a place you can call home. Verified student accommodation near your university.
             </p>
             <div className="mt-4 flex gap-3 text-slate-400">
-              <Mail className="h-5 w-5 hover:text-primary" />
-              <Phone className="h-5 w-5 hover:text-primary" />
-              <Globe className="h-5 w-5 hover:text-primary" />
+              <Mail className="h-5 w-5 hover:text-white" />
+              <Phone className="h-5 w-5 hover:text-white" />
+              <Globe className="h-5 w-5 hover:text-white" />
             </div>
           </div>
 
           {columns.map((col) => (
             <div key={col.title}>
-              <h4 className="text-sm font-semibold text-slate-800">{col.title}</h4>
+              <h4 className="text-sm font-semibold text-slate-800 text-white">{col.title}</h4>
               <ul className="mt-3 space-y-2">
                 {col.links.map((l) => (
                   <li key={l.label}>
-                    <Link to={l.to} className="text-sm text-slate-500 hover:text-primary">
+                    <Link to={l.to} className="text-sm text-slate-500 hover:text-white">
                       {l.label}
                     </Link>
                   </li>

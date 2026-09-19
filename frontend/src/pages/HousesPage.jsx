@@ -136,7 +136,7 @@ export default function HousesPage() {
                   )}
 
                   <span className="absolute top-3 right-3 rounded-full bg-slate-900/80 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white">
-                    KES {prop.monthly_rent?.toLocaleString()}/mo
+                    KES {prop.monthly_rent?.toLocaleString()}/sem
                   </span>
                 </div>
 

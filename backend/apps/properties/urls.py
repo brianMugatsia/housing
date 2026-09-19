@@ -7,6 +7,7 @@ from .views import (
     AdminRejectPropertyView,
     AmenityListView,
     PropertyViewSet,
+    UniversityListView,
 )
 
 router = DefaultRouter()
@@ -14,6 +15,7 @@ router.register(r"", PropertyViewSet, basename="property")
 
 urlpatterns = [
     # Static routes MUST come before router includes
+    path("universities/", UniversityListView.as_view(), name="university-list"),
     path("amenities/", AmenityListView.as_view(), name="amenity-list"),
     path("admin/pending/", AdminPendingPropertiesView.as_view(), name="admin-pending-properties"),
     path("admin/<int:pk>/approve/", AdminApprovePropertyView.as_view(), name="admin-approve-property"),

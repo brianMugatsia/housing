@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Building2, AlertCircle } from "lucide-react";
+import { Plus, Building2, AlertCircle, RefreshCw } from "lucide-react";
 import { listMyProperties } from "../../services/properties";
 import PropertyCard from "../../components/PropertyCard";
 import Button from "../../components/ui/Button";
@@ -11,45 +11,79 @@ export default function LandlordProperties() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let isMounted = true;
+  const fetchProperties = useCallback(async (isManualReload = false) => {
+    if (isManualReload) {
+      setLoading(true);
+      setError("");
+    }
+    
+    try {
+      const response = await listMyProperties();
 
-    const fetchProperties = async () => {
+      const propertyList = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.results)
+        ? response.results
+        : Array.isArray(response?.data?.results)
+        ? response.data.results
+        : Array.isArray(response?.data)
+        ? response.data
+        : [];
+
+      setProperties(propertyList);
+    } catch (err) {
+      console.error("Failed to load landlord properties:", err);
+      setError(
+        err.response?.status === 401
+          ? "Authentication required. Please log in again."
+          : "Failed to load properties. Please try again."
+      );
+      setProperties([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadData = async () => {
       try {
         const response = await listMyProperties();
-        if (!isMounted) return;
+        if (!ignore) {
+          const propertyList = Array.isArray(response)
+            ? response
+            : Array.isArray(response?.results)
+            ? response.results
+            : Array.isArray(response?.data?.results)
+            ? response.data.results
+            : Array.isArray(response?.data)
+            ? response.data
+            : [];
 
-        // Extract list safely from array or paginated object structure
-        const propertyList = Array.isArray(response)
-          ? response
-          : Array.isArray(response?.results)
-          ? response.results
-          : Array.isArray(response?.data?.results)
-          ? response.data.results
-          : Array.isArray(response?.data)
-          ? response.data
-          : [];
-
-        setProperties(propertyList);
+          setProperties(propertyList);
+        }
       } catch (err) {
-        console.error("Failed to load landlord properties:", err);
-        if (isMounted) {
+        if (!ignore) {
+          console.error("Failed to load landlord properties:", err);
           setError(
             err.response?.status === 401
               ? "Authentication required. Please log in again."
               : "Failed to load properties. Please try again."
           );
-          setProperties([]); // Guarantee array type to avoid .map runtime exceptions
+          setProperties([]);
         }
       } finally {
-        if (isMounted) setLoading(false);
+        if (!ignore) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchProperties();
+    loadData();
 
     return () => {
-      isMounted = false;
+      ignore = true;
     };
   }, []);
 
@@ -65,18 +99,36 @@ export default function LandlordProperties() {
             View and manage all real estate listings created under your account.
           </p>
         </div>
-        <Link to="/landlord/properties/new">
-          <Button className="flex items-center gap-2">
-            <Plus className="h-4 w-4" /> Add Property
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => fetchProperties(true)}
+            disabled={loading}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Reload
           </Button>
-        </Link>
+          <Link to="/landlord/properties/new">
+            <Button className="flex items-center gap-2">
+              <Plus className="h-4 w-4" /> Add Property
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Error State */}
       {error && (
-        <div className="mt-6 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <AlertCircle className="h-5 w-5 shrink-0" />
-          <span>{error}</span>
+        <div className="mt-6 flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={() => fetchProperties(true)}
+            className="font-semibold text-red-800 underline hover:text-red-900"
+          >
+            Retry
+          </button>
         </div>
       )}
 

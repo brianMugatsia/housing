@@ -3,7 +3,7 @@ from rest_framework import generics, parsers, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Amenity, Property, PropertyImage
+from .models import Amenity, Property, PropertyImage, University
 from .permissions import IsAdmin, IsLandlordOwnerOrReadOnly
 from .serializers import (
     AmenitySerializer,
@@ -11,7 +11,15 @@ from .serializers import (
     PropertyRejectSerializer,
     PropertySerializer,
     PropertyWriteSerializer,
+    UniversitySerializer,
 )
+
+
+class UniversityListView(generics.ListAPIView):
+    """Provides a list of all universities for property registration drop-downs."""
+    queryset = University.objects.all().order_by("name")
+    serializer_class = UniversitySerializer
+    permission_classes = [permissions.AllowAny]
 
 
 class AmenityListView(generics.ListAPIView):
@@ -22,6 +30,7 @@ class AmenityListView(generics.ListAPIView):
 
 class PropertyViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsLandlordOwnerOrReadOnly]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     def get_serializer_context(self):
         """Pass the request context to serializers so DRF generates full absolute URLs for media files."""
@@ -126,7 +135,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
         if property_obj.landlord_id != request.user.id:
             return Response({"detail": "Not your property."}, status=status.HTTP_403_FORBIDDEN)
 
-        files = request.FILES.getlist("images")
+        files = request.FILES.getlist("images") or request.FILES.getlist("uploaded_images")
         if not files:
             return Response({"detail": "No images provided."}, status=status.HTTP_400_BAD_REQUEST)
 

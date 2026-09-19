@@ -20,6 +20,8 @@ import LandlordProperties from "./pages/landlord/LandlordProperties";
 import AddProperty from "./pages/landlord/AddProperty";
 import LandlordBookings from "./pages/landlord/LandlordBookings";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import PaymentPage from "./pages/payment/PaymentPage";
+import AdminPayments from "./pages/admin/AdminPayments";
 
 function App() {
   return (
@@ -54,6 +56,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/pay/:bookingId"
+            element={
+              <ProtectedRoute allowedRoles={["STUDENT"]}>
+                <PaymentPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Landlord Protected Routes */}
           <Route
@@ -76,6 +86,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={["ADMIN"]}>
                 <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/payments"
+            element={
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
+                <AdminPayments />
               </ProtectedRoute>
             }
           />
