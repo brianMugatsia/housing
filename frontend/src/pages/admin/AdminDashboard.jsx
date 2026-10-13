@@ -13,6 +13,7 @@ import {
   Maximize2,
   RefreshCw
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 
@@ -225,14 +226,22 @@ export default function AdminDashboard() {
             Welcome back, <span className="font-semibold text-slate-700">{user?.full_name || user?.username || "Admin"}</span>. Review and verify property listings.
           </p>
         </div>
-        <button
-          onClick={handleManualRefresh}
-          disabled={loading}
-          className="flex items-center gap-2 self-start md:self-auto px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin text-slate-400" : ""}`} />
-          Refresh
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Link
+            to="/admin/payments"
+            className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+          >
+            View payments
+          </Link>
+          <button
+            onClick={handleManualRefresh}
+            disabled={loading}
+            className="flex items-center justify-center gap-2 self-start px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin text-slate-400" : ""}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Metrics Row */}
