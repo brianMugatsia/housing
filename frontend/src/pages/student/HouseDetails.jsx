@@ -96,7 +96,7 @@ export default function HouseDetails() {
 
   // Fallback prepend if backend sends a relative URL string
   if (imageUrl && typeof imageUrl === "string" && !imageUrl.startsWith("http")) {
-    imageUrl = `http://127.0.0.1:8000${imageUrl}`;
+    imageUrl = `${import.meta.env.VITE_MEDIA_URL ?? "http://127.0.0.1:8000"}${imageUrl}`;
   }
 
   return (

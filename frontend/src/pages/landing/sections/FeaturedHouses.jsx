@@ -24,7 +24,7 @@ export default function FeaturedHouses() {
     let url = primaryImgObj?.image || house.image;
 
     if (url && typeof url === "string" && !url.startsWith("http")) {
-      url = `http://127.0.0.1:8000${url}`;
+      url = `${import.meta.env.VITE_MEDIA_URL ?? "http://127.0.0.1:8000"}${url}`;
     }
 
     return url;
