@@ -2,13 +2,23 @@ import { useState, useEffect } from "react";
 import api from "../../services/api";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
-import { CheckCircle, XCircle, Receipt, Clock, AlertCircle } from "lucide-react";
+import { CheckCircle, XCircle, Receipt, Clock, AlertCircle, User, Calendar, MapPin, Building2, Phone } from "lucide-react";
 
 const PAYMENT_STATUS_STYLE = {
-  COMPLETED: { icon: <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />, cls: "text-emerald-700" },
-  PENDING: { icon: <Clock className="h-3.5 w-3.5 text-amber-500" />, cls: "text-amber-600" },
-  FAILED: { icon: <AlertCircle className="h-3.5 w-3.5 text-red-500" />, cls: "text-red-600" },
-  CANCELLED: { icon: <XCircle className="h-3.5 w-3.5 text-slate-400" />, cls: "text-slate-500" },
+  COMPLETED: { icon: <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />, cls: "bg-emerald-50 text-emerald-700 border-emerald-100" },
+  PENDING: { icon: <Clock className="h-3.5 w-3.5 text-amber-500" />, cls: "bg-amber-50 text-amber-700 border-amber-100" },
+  FAILED: { icon: <AlertCircle className="h-3.5 w-3.5 text-red-500" />, cls: "bg-red-50 text-red-700 border-red-100" },
+  CANCELLED: { icon: <XCircle className="h-3.5 w-3.5 text-slate-400" />, cls: "bg-slate-50 text-slate-700 border-slate-100" },
+};
+
+const STATUS_VARIANTS = {
+  PENDING: "bg-amber-50 text-amber-700 border-amber-200",
+  APPROVED: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  DEPOSIT_PAID: "bg-blue-50 text-blue-700 border-blue-200",
+  CONFIRMED: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  REJECTED: "bg-rose-50 text-rose-700 border-rose-200",
+  CANCELLED: "bg-slate-50 text-slate-700 border-slate-200",
+  VACATED: "bg-slate-100 text-slate-600 border-slate-200",
 };
 
 export default function LandlordBookings() {
@@ -31,8 +41,6 @@ export default function LandlordBookings() {
         const bookingsData = bookingsRes.data.results || bookingsRes.data;
         const paymentsData = paymentsRes.data.results || paymentsRes.data;
 
-        // Group payments by booking ID and phase (DEPOSIT / RENT),
-        // keeping only the most recent attempt per phase.
         const grouped = {};
         (Array.isArray(paymentsData) ? paymentsData : []).forEach((p) => {
           if (!grouped[p.booking]) grouped[p.booking] = {};
@@ -73,116 +81,126 @@ export default function LandlordBookings() {
   const formatKES = (amount) => `KES ${Number(amount || 0).toLocaleString("en-KE")}`;
 
   const renderPaymentLine = (label, payment) => {
-    if (!payment) {
-      return (
-        <span className="text-slate-400">
-          {label}: <span className="italic">not initiated</span>
-        </span>
-      );
-    }
+    if (!payment) return null;
     const style = PAYMENT_STATUS_STYLE[payment.status] || {};
     return (
-      <span className={`flex items-center gap-1 ${style.cls || "text-slate-500"}`}>
-        {style.icon} {label}: {formatKES(payment.amount)}
-        {payment.status === "COMPLETED" && payment.mpesa_receipt_number && (
-          <span className="ml-1 font-mono text-slate-400">#{payment.mpesa_receipt_number}</span>
+      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold ${style.cls}`}>
+        {style.icon}
+        <span>{label}: {formatKES(payment.amount)}</span>
+        {payment.mpesa_receipt_number && (
+          <span className="ml-1 opacity-60 font-mono">#{payment.mpesa_receipt_number}</span>
         )}
-        {payment.status !== "COMPLETED" && (
-          <span className="ml-1 text-slate-400">({payment.status.toLowerCase()})</span>
-        )}
-      </span>
+      </div>
     );
   };
 
-  if (loading) return <div className="p-8 text-center">Loading requests...</div>;
+  if (loading) return (
+    <div className="flex min-h-[400px] items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-900 border-t-transparent" />
+    </div>
+  );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6 lg:p-8">
+    <div className="mx-auto max-w-7xl space-y-8 p-6 lg:p-10 animate-fadeIn">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Booking Requests</h1>
-        <p className="mt-1 text-slate-500">Approve or reject incoming student room reservations.</p>
+        <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">Booking Requests</h1>
+        <p className="mt-2 text-lg text-slate-500">Manage student reservations and track payment statuses.</p>
       </div>
 
-      <div className="space-y-4">
+      <div className="grid gap-6">
         {bookings.length === 0 ? (
-          <Card className="p-8 text-center text-slate-500">No booking requests found.</Card>
+          <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white p-20 text-center">
+            <Calendar className="mx-auto h-12 w-12 text-slate-300" />
+            <p className="mt-4 text-slate-500 font-medium">No booking requests yet. Your property listings are active!</p>
+          </div>
         ) : (
           bookings.map((booking) => {
-            const title =
-              booking.property_details?.title ||
-              booking.property?.title ||
-              booking.property_title ||
-              "Housing Unit";
-
-            const studentName =
-              booking.student_name ||
-              booking.student?.full_name ||
-              (booking.student?.first_name
-                ? `${booking.student.first_name} ${booking.student.last_name || ""}`
-                : null) ||
-              booking.user?.full_name ||
-              "N/A";
-
+            const title = booking.property_details?.title || booking.property?.title || "Housing Unit";
+            const studentName = booking.student_name || "Student";
             const payments = paymentsByBooking[booking.id] || {};
 
             return (
-              <Card key={booking.id} className="flex flex-col gap-4 p-6">
-                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-slate-900">{title}</h3>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          booking.status === "APPROVED"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : booking.status === "DEPOSIT_PAID"
-                            ? "bg-blue-100 text-blue-800"
-                            : booking.status === "CONFIRMED"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : booking.status === "REJECTED"
-                            ? "bg-rose-100 text-rose-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
+              <div key={booking.id} className="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:shadow-xl hover:border-slate-300">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex-1 space-y-4">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h3 className="text-xl font-extrabold text-slate-900">{title}</h3>
+                      <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider ${STATUS_VARIANTS[booking.status] || STATUS_VARIANTS.PENDING}`}>
                         {booking.status}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">Student: {studentName}</p>
-                    <p className="text-xs text-slate-500">
-                      Move-in Date: {booking.move_in_date || "N/A"}
-                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="flex items-center gap-3 text-sm text-slate-600">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+                          <User className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold uppercase text-slate-400">Student</span>
+                          <span className="font-bold text-slate-900">{studentName}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-sm text-slate-600">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+                          <Calendar className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold uppercase text-slate-400">Move-in Date</span>
+                          <span className="font-bold text-slate-900">{booking.move_in_date || "N/A"}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-sm text-slate-600">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+                          <Building2 className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold uppercase text-slate-400">Unit Number</span>
+                          <span className="font-bold text-slate-900">#{booking.house_number || "Any"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {(payments.DEPOSIT || payments.RENT) && (
+                      <div className="flex flex-wrap gap-3 pt-2">
+                        {renderPaymentLine("Deposit", payments.DEPOSIT)}
+                        {renderPaymentLine("Rent", payments.RENT)}
+                      </div>
+                    )}
                   </div>
 
                   {booking.status === "PENDING" && (
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 border-t border-slate-50 pt-4 lg:border-none lg:pt-0">
                       <Button
                         onClick={() => handleStatusUpdate(booking.id, "APPROVED")}
-                        className="flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+                        className="flex-1 lg:flex-none flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 font-bold text-white shadow-lg transition-transform active:scale-95"
                       >
                         <CheckCircle className="h-4 w-4" /> Approve
                       </Button>
                       <Button
                         onClick={() => handleStatusUpdate(booking.id, "REJECTED")}
                         variant="outline"
-                        className="flex items-center gap-1.5 border-rose-300 text-rose-600 hover:bg-rose-50"
+                        className="flex-1 lg:flex-none flex items-center justify-center gap-2 rounded-2xl border-rose-200 px-6 py-3 font-bold text-rose-600 hover:bg-rose-50 transition-colors"
                       >
                         <XCircle className="h-4 w-4" /> Reject
                       </Button>
                     </div>
                   )}
-                </div>
 
-                {/* Payment status only makes sense once a booking has progressed past PENDING */}
-                {booking.status !== "PENDING" && booking.status !== "REJECTED" && (
-                  <div className="flex items-center gap-2 border-t border-slate-100 pt-3 text-xs">
-                    <Receipt className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                    <div className="flex flex-wrap gap-x-5 gap-y-1">
-                      {renderPaymentLine("Deposit", payments.DEPOSIT)}
-                      {renderPaymentLine("Rent", payments.RENT)}
+                  {booking.student_phone && (
+                    <div className="lg:text-right">
+                      <a 
+                        href={`tel:${booking.student_phone}`}
+                        className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
+                      >
+                        <Phone className="h-3.5 w-3.5" />
+                        {booking.student_phone}
+                      </a>
                     </div>
-                  </div>
-                )}
-              </Card>
+                  )}
+                </div>
+              </div>
             );
           })
         )}

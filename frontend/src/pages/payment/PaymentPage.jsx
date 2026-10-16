@@ -26,7 +26,7 @@ export default function PaymentPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  const [phoneNumber, setPhoneNumber] = useState("254708374149"); // sandbox test MSISDN default
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [phase, setPhase] = useState(null); // "DEPOSIT" | "RENT" | null (nothing due)
 
   // "idle" -> "sending" -> "waiting" -> "success" | "failed" | "timeout"
@@ -47,6 +47,9 @@ export default function PaymentPage() {
 
         const b = res.data;
         setBooking(b);
+        if (b.student_phone) {
+          setPhoneNumber(b.student_phone);
+        }
 
         if (b.status === "APPROVED") {
           setPhase("DEPOSIT");
@@ -278,7 +281,7 @@ export default function PaymentPage() {
                     />
                   </div>
                   <p className="mt-1.5 text-xs text-slate-400">
-                    Sandbox mode: only 254708374149 will trigger a simulated payment.
+                    Enter your Safaricom M-Pesa number (e.g. 07XXXXXXXX or 2547XXXXXXXX).
                   </p>
                 </div>
 

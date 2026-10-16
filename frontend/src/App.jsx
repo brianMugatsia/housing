@@ -20,6 +20,7 @@ import LandlordProperties from "./pages/landlord/LandlordProperties";
 import AddProperty from "./pages/landlord/AddProperty";
 import LandlordBookings from "./pages/landlord/LandlordBookings";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminBookings from "./pages/admin/AdminBookings";
 import PaymentPage from "./pages/payment/PaymentPage";
 import AdminPayments from "./pages/admin/AdminPayments";
 
@@ -82,10 +83,26 @@ function App() {
 
           {/* Admin Protected Routes */}
           <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin/dashboard"
             element={
               <ProtectedRoute allowedRoles={["ADMIN"]}>
                 <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/bookings"
+            element={
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
+                <AdminBookings />
               </ProtectedRoute>
             }
           />
