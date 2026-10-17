@@ -1,59 +1,86 @@
 import { useEffect, useState, useCallback } from "react";
-import { UserCheck, LogOut, ArrowRightLeft, AlertCircle } from "lucide-react";
-import Card from "../../components/ui/Card";
+import { Link } from "react-router-dom";
+import { 
+  UserCheck, 
+  LogOut, 
+  ArrowRightLeft, 
+  AlertCircle, 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  Building2,
+  Calendar,
+  ArrowRight,
+  TrendingUp,
+  Phone,
+  RefreshCw,
+  Wrench,
+  MessageSquare
+} from "lucide-react";
 import api from "../../services/api";
-import { vacateBooking, shiftRoom } from "../../services/properties";
+import { vacateBooking, shiftRoom, approveBooking, rejectBooking } from "../../services/properties";
+import MaintenanceSection from "../../components/MaintenanceSection";
+import ChatModal from "../../components/ChatModal";
 
 export default function LandlordDashboard() {
   const [bookings, setBookings] = useState([]);
+  const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionId, setActionId] = useState(null);
+  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "maintenance"
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatRecipient, setChatRecipient] = useState({ id: null, name: "" });
 
-  // Function for manual re-fetching (e.g. after vacating or shifting rooms)
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const bookingsRes = await api.get("/bookings/");
-      const data = bookingsRes.data.results || bookingsRes.data || [];
-      setBookings(data);
+      const [bookingsRes, propsRes] = await Promise.all([
+        api.get("/bookings/"),
+        api.get("/properties/?mine=true").catch(() => ({ data: [] })),
+      ]);
+      const bData = bookingsRes.data.results || bookingsRes.data || [];
+      const pData = propsRes.data.results || propsRes.data || [];
+      setBookings(Array.isArray(bData) ? bData : []);
+      setProperties(Array.isArray(pData) ? pData : []);
     } catch (err) {
-      console.error("Failed to load dashboard data:", err);
-      setError("Unable to load active bookings.");
+      console.error("Failed to load landlord dashboard data:", err);
+      setError("Unable to load latest dashboard data.");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Safe initial data load on mount (prevents synchronous state updates in effect body)
   useEffect(() => {
-    let ignore = false;
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
-    const loadInitialData = async () => {
-      try {
-        const bookingsRes = await api.get("/bookings/");
-        if (!ignore) {
-          const data = bookingsRes.data.results || bookingsRes.data || [];
-          setBookings(data);
-        }
-      } catch (err) {
-        if (!ignore) {
-          console.error("Failed to load dashboard data:", err);
-          setError("Unable to load active bookings.");
-        }
-      } finally {
-        if (!ignore) {
-          setLoading(false);
-        }
-      }
-    };
+  const handleApprove = async (bookingId) => {
+    setActionId(bookingId);
+    try {
+      await approveBooking(bookingId);
+      await fetchDashboardData();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Failed to approve booking.");
+    } finally {
+      setActionId(null);
+    }
+  };
 
-    loadInitialData();
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
+  const handleReject = async (bookingId) => {
+    const reason = window.prompt("Reason for rejecting booking (optional):");
+    if (reason === null) return;
+    setActionId(bookingId);
+    try {
+      await rejectBooking(bookingId, reason);
+      await fetchDashboardData();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Failed to reject booking.");
+    } finally {
+      setActionId(null);
+    }
+  };
 
   const handleVacate = async (bookingId) => {
     if (!window.confirm("Confirm tenant checkout? This will free up 1 available unit.")) return;
@@ -79,115 +106,307 @@ export default function LandlordDashboard() {
     }
   };
 
+  const pendingBookings = bookings.filter((b) => b.status === "PENDING");
   const activeTenants = bookings.filter(
-    (b) => b.status === "APPROVED" || b.status === "CONFIRMED"
+    (b) => b.status === "APPROVED" || b.status === "CONFIRMED" || b.status === "DEPOSIT_PAID"
   );
 
   const semesterRevenue = activeTenants.reduce((acc, booking) => {
-    return acc + Number(booking.property_details?.monthly_rent || 0);
+    return acc + Number(booking.property_details?.semester_rent || 0);
   }, 0);
 
-  const formatKES = (amount) => {
-    return `KSh ${Number(amount).toLocaleString("en-KE")}`;
-  };
+  const formatKES = (amount) => `KES ${Number(amount || 0).toLocaleString("en-KE")}`;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 p-6 lg:p-8">
-      <Card className="p-6">
-        <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <UserCheck className="h-5 w-5 text-emerald-600" />
-            <h2 className="text-lg font-semibold text-slate-900">Active Tenants</h2>
-          </div>
+    <div className="mx-auto max-w-7xl space-y-8 p-6 lg:p-10 animate-fadeIn">
+      {/* Top Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <span className="text-xs font-black uppercase tracking-wider text-primary bg-primary/10 px-3.5 py-1 rounded-full">
+            Landlord Overview
+          </span>
+          <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
+            Property Management
+          </h1>
+          <p className="mt-1 text-slate-500 text-sm">
+            Monitor reservations, review pending tenant requests, and oversee occupied properties.
+          </p>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 border border-emerald-200">
-              Total Semester Revenue:{" "}
-              <span className="text-sm font-bold text-emerald-700">
-                {formatKES(semesterRevenue)}
+        <div className="flex items-center gap-3">
+          <Link
+            to="/landlord/properties/new"
+            className="rounded-2xl bg-slate-900 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-slate-900/10 hover:bg-slate-800 transition-all cursor-pointer"
+          >
+            + Add New Property
+          </Link>
+          <button
+            onClick={fetchDashboardData}
+            disabled={loading}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-700 shadow-xs hover:bg-slate-50 cursor-pointer"
+            title="Refresh"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-3 border-b border-slate-200 pb-3">
+        <button
+          onClick={() => setActiveTab("overview")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === "overview" ? "bg-slate-900 text-white shadow-sm" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+          }`}
+        >
+          <Building2 className="h-4 w-4" /> Bookings & Occupants
+        </button>
+        <button
+          onClick={() => setActiveTab("maintenance")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === "maintenance" ? "bg-slate-900 text-white shadow-sm" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+          }`}
+        >
+          <Wrench className="h-4 w-4" /> Maintenance Tickets
+        </button>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-2xl bg-red-50 p-4 text-xs font-bold text-red-700 border border-red-200">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {activeTab === "maintenance" ? (
+        <MaintenanceSection isLandlord={true} />
+      ) : (
+        <>
+          {/* Metrics Row */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Monthly Revenue</span>
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-3 text-2xl font-black text-slate-900">{formatKES(semesterRevenue)}</div>
+              <span className="mt-1 block text-[11px] font-semibold text-emerald-600">From active tenants</span>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Pending Approvals</span>
+                <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${pendingBookings.length > 0 ? "bg-amber-100 text-amber-700 animate-pulse" : "bg-slate-100 text-slate-400"}`}>
+                  <Clock className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-3 text-2xl font-black text-slate-900">{pendingBookings.length}</div>
+              <span className={`mt-1 block text-[11px] font-semibold ${pendingBookings.length > 0 ? "text-amber-700" : "text-slate-400"}`}>
+                {pendingBookings.length > 0 ? "Immediate action required" : "All requests reviewed"}
               </span>
             </div>
 
-            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-              {activeTenants.length} Occupied
-            </span>
-          </div>
-        </div>
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Occupied Units</span>
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                  <UserCheck className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-3 text-2xl font-black text-slate-900">{activeTenants.length}</div>
+              <span className="mt-1 block text-[11px] font-semibold text-indigo-600">Active student occupants</span>
+            </div>
 
-        {error && (
-          <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-xs text-red-700">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Listings</span>
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+                  <Building2 className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-3 text-2xl font-black text-slate-900">{properties.length}</div>
+              <span className="mt-1 block text-[11px] font-semibold text-slate-500">Properties on platform</span>
+            </div>
           </div>
-        )}
 
-        {loading ? (
-          <div className="py-8 text-center text-sm text-slate-500">Loading active tenants...</div>
-        ) : activeTenants.length === 0 ? (
-          <div className="py-8 text-center text-sm text-slate-500">
-            No active tenants currently assigned to your properties.
-          </div>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Tenant Name</th>
-                  <th className="px-4 py-3">Phone Number</th>
-                  <th className="px-4 py-3">Property</th>
-                  <th className="px-4 py-3">House / Unit No.</th>
-                  <th className="px-4 py-3">Rent Amount</th>
-                  <th className="px-4 py-3">Move-In Date</th>
-                  <th className="px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {activeTenants.map((booking) => (
-                  <tr key={booking.id} className="hover:bg-slate-50/50">
-                    <td className="px-4 py-3 font-semibold text-slate-900">
-                      {booking.student_name || "Student Tenant"}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-700">
-                      {booking.student_phone || "N/A"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {booking.property_details?.title || `Property #${booking.property}`}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded bg-slate-100 px-2 py-1 text-xs font-mono font-bold text-slate-800 border border-slate-200">
-                        {booking.house_number || "Unassigned"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-800">
-                      {formatKES(booking.property_details?.monthly_rent || 0)}
-                    </td>
-                    <td className="px-4 py-3">{booking.move_in_date}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleShiftRoom(booking.id, booking.house_number)}
-                          className="flex items-center gap-1 rounded bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors"
-                          title="Shift Room"
-                        >
-                          <ArrowRightLeft className="h-3.5 w-3.5" /> Shift
-                        </button>
+          {/* SECTION 1: Pending Booking Requests */}
+          {pendingBookings.length > 0 && (
+            <div className="rounded-3xl border-2 border-amber-300/80 bg-amber-50/40 p-6 sm:p-8 space-y-5 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-amber-200/60 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-3 w-3 rounded-full bg-amber-500 animate-ping" />
+                  <h2 className="text-xl font-black text-slate-900">
+                    Action Required: Pending Booking Requests ({pendingBookings.length})
+                  </h2>
+                </div>
+                <Link
+                  to="/landlord/bookings"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 hover:text-amber-900 hover:underline"
+                >
+                  View all requests <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
 
-                        <button
-                          onClick={() => handleVacate(booking.id)}
-                          className="flex items-center gap-1 rounded bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors"
-                          title="Vacate Property"
-                        >
-                          <LogOut className="h-3.5 w-3.5" /> Vacate
-                        </button>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {pendingBookings.map((b) => (
+                  <div
+                    key={b.id}
+                    className="flex flex-col justify-between rounded-2xl border border-amber-200 bg-white p-5 shadow-sm space-y-4"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="font-extrabold text-slate-900 text-base">
+                            {b.property_details?.title || b.property?.title || "Property Unit"}
+                          </h3>
+                          {b.house_number && (
+                            <span className="inline-block mt-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-700">
+                              Unit #{b.house_number}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-right">
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase">Rent</span>
+                          <span className="font-black text-slate-900 text-sm">
+                            {formatKES(b.property_details?.semester_rent || 0)}
+                          </span>
+                        </span>
                       </div>
-                    </td>
-                  </tr>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <div>
+                          <span className="block text-[10px] text-slate-400 font-bold uppercase">Applicant</span>
+                          <span className="font-bold text-slate-900">{b.student_name || "Student"}</span>
+                          {b.student_phone && <span className="block text-[11px] text-slate-500">{b.student_phone}</span>}
+                        </div>
+                        <div>
+                          <span className="block text-[10px] text-slate-400 font-bold uppercase">Move-In</span>
+                          <span className="font-bold text-slate-900">{b.move_in_date || "Flexible"}</span>
+                          <span className="block text-[11px] text-slate-500">{b.duration_months || 1} months</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        onClick={() => handleApprove(b.id)}
+                        disabled={actionId === b.id}
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        {actionId === b.id ? "Approving..." : "Approve"}
+                      </button>
+                      <button
+                        onClick={() => handleReject(b.id)}
+                        disabled={actionId === b.id}
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <XCircle className="h-4 w-4" />
+                        Reject
+                      </button>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
+          )}
+
+          {/* SECTION 2: Active Occupants / Tenants */}
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2.5">
+                <UserCheck className="h-5 w-5 text-emerald-600" />
+                <h2 className="text-xl font-black text-slate-900">Current Active Occupants</h2>
+              </div>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 border border-emerald-200 self-start">
+                {activeTenants.length} Occupied Units
+              </span>
+            </div>
+
+            {activeTenants.length === 0 ? (
+              <div className="py-12 text-center text-sm text-slate-400">
+                No active occupants at this moment. Approved bookings will appear here once confirmed.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-600">
+                  <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3 rounded-l-xl">Tenant</th>
+                      <th className="px-4 py-3">Phone</th>
+                      <th className="px-4 py-3">Property</th>
+                      <th className="px-4 py-3">Unit #</th>
+                      <th className="px-4 py-3">Rent</th>
+                      <th className="px-4 py-3">Move-In</th>
+                      <th className="px-4 py-3 rounded-r-xl text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {activeTenants.map((booking) => (
+                      <tr key={booking.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-4 py-3 font-bold text-slate-900">
+                          {booking.student_name || "Student Tenant"}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-600">
+                          {booking.student_phone || "—"}
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-slate-800">
+                          {booking.property_details?.title || `Property #${booking.property}`}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-mono font-bold text-slate-800 border border-slate-200">
+                            {booking.house_number || "Unassigned"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-extrabold text-slate-900">
+                          {formatKES(booking.property_details?.semester_rent || 0)}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">{booking.move_in_date || "—"}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="inline-flex items-center gap-1.5 justify-end">
+                            <button
+                              onClick={() => { setChatRecipient({ id: booking.student, name: booking.student_name || "Tenant" }); setChatOpen(true); }}
+                              className="flex items-center gap-1 rounded-xl bg-indigo-50 px-3 py-1.5 font-bold text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+                              title="Chat Tenant"
+                            >
+                              <MessageSquare className="h-3 w-3" /> Chat
+                            </button>
+                            <button
+                              onClick={() => handleShiftRoom(booking.id, booking.house_number)}
+                              className="flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-1.5 font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                              title="Shift Unit"
+                            >
+                              <ArrowRightLeft className="h-3 w-3" /> Shift
+                            </button>
+                            <button
+                              onClick={() => handleVacate(booking.id)}
+                              className="flex items-center gap-1 rounded-xl bg-rose-50 px-3 py-1.5 font-bold text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer"
+                              title="Checkout Tenant"
+                            >
+                              <LogOut className="h-3 w-3" /> Checkout
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
-      </Card>
+        </>
+      )}
+
+      {/* Chat Modal */}
+      {chatOpen && (
+        <ChatModal
+          recipientId={chatRecipient.id}
+          recipientName={chatRecipient.name}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -82,9 +82,9 @@ class PropertyViewSet(viewsets.ModelViewSet):
         if params.get("room_type"):
             qs = qs.filter(room_type=params["room_type"])
         if params.get("min_rent"):
-            qs = qs.filter(monthly_rent__gte=params["min_rent"])
+            qs = qs.filter(semester_rent__gte=params["min_rent"])
         if params.get("max_rent"):
-            qs = qs.filter(monthly_rent__lte=params["max_rent"])
+            qs = qs.filter(semester_rent__lte=params["max_rent"])
         if params.get("available_rooms"):
             qs = qs.filter(available_rooms__gte=params["available_rooms"])
         if params.get("max_distance"):

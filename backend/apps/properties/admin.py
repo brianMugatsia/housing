@@ -28,7 +28,7 @@ class PropertyAdmin(admin.ModelAdmin):
         "title",
         "landlord",
         "university",
-        "monthly_rent",
+        "semester_rent",
         "verification_status",
         "created_at",
     )

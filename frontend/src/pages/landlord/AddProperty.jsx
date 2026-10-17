@@ -67,8 +67,7 @@ export default function AddProperty() {
     county: "",
     town: "",
     address: "",
-    monthly_rent: "",
-    deposit: "",
+    semester_rent: "",
     amenities: [],
   });
 
@@ -192,7 +191,7 @@ export default function AddProperty() {
         return false;
       }
     } else if (currentStep === 3) {
-      if (!formData.monthly_rent || Number(formData.monthly_rent) <= 0) {
+      if (!formData.semester_rent || Number(formData.semester_rent) <= 0) {
         setError("Please enter a valid rent amount.");
         return false;
       }
@@ -246,8 +245,8 @@ export default function AddProperty() {
       payload.append("county", formData.county.trim());
       payload.append("town", formData.town.trim());
       payload.append("address", formData.address.trim());
-      payload.append("monthly_rent", formData.monthly_rent);
-      payload.append("deposit", formData.deposit || 0);
+      payload.append("semester_rent", formData.semester_rent);
+      payload.append("deposit", 0);
 
       // Quantities matching Property model fields
       payload.append("total_rooms", totalUnits);
@@ -566,36 +565,20 @@ export default function AddProperty() {
         {currentStep === 3 && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-xl border border-slate-200 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
-                    SEMESTER RENT (KES)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    name="monthly_rent"
-                    value={formData.monthly_rent}
-                    onChange={handleChange}
-                    placeholder="30000"
-                    className="w-full p-3 bg-slate-50/50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
-                    DEPOSIT (KES)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    name="deposit"
-                    value={formData.deposit}
-                    onChange={handleChange}
-                    placeholder="2000"
-                    className="w-full p-3 bg-slate-50/50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                  SEMESTER RENT (KES)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  name="semester_rent"
+                  value={formData.semester_rent}
+                  onChange={handleChange}
+                  placeholder="30000"
+                  className="w-full p-3 bg-slate-50/50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+                <p className="mt-1.5 text-xs text-slate-500 font-medium">Students pay this full amount directly upon approval (no separate deposit required).</p>
               </div>
 
               <div className="pt-2">

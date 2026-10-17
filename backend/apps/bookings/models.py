@@ -30,6 +30,12 @@ class Booking(models.Model):
     duration_months = models.IntegerField(default=12)
     notes = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    
+    # E-signing fields
+    tenant_signature = models.TextField(blank=True, default="")
+    landlord_signature = models.TextField(blank=True, default="")
+    lease_signed_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

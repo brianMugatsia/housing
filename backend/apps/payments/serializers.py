@@ -6,7 +6,7 @@ from .utils import normalize_phone_number
 
 class InitiatePaymentSerializer(serializers.Serializer):
     booking_id = serializers.IntegerField()
-    phase = serializers.ChoiceField(choices=Payment.PaymentPhase.choices)
+    phase = serializers.CharField(required=False, default="RENT")
     phone_number = serializers.CharField()
 
     def validate_phone_number(self, value):

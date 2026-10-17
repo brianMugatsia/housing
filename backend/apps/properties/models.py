@@ -68,7 +68,7 @@ class Property(models.Model):
         help_text="Distance in kilometers",
     )
 
-    monthly_rent = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    semester_rent = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     deposit = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], default=0)
     total_rooms = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     available_rooms = models.PositiveIntegerField(validators=[MinValueValidator(0)])

@@ -18,10 +18,8 @@ logger = logging.getLogger(__name__)
 
 class InitiateSTKPushView(APIView):
     """
-    Starts an M-Pesa STK Push for either the deposit or the rent phase
-    of a booking. Enforces the two-stage flow:
-      - Deposit can only be initiated once the booking is APPROVED.
-      - Rent can only be initiated once the deposit is COMPLETED.
+    Starts an M-Pesa STK Push for the full payment amount of an approved booking.
+    Students pay the full amount directly (no deposit requirement).
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -39,30 +37,23 @@ class InitiateSTKPushView(APIView):
                 {"detail": "Booking not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
-        phase = data["phase"]
+        if booking.status not in ["APPROVED", "PENDING"]:
+            if booking.status == "CONFIRMED":
+                return Response(
+                    {"detail": "This booking is already fully paid and confirmed."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(
+                {"detail": f"Cannot pay for booking with status '{booking.status}'. Ensure it is approved."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         property_obj = booking.property
+        phase = data.get("phase") or "RENT"
 
-        if phase == Payment.PaymentPhase.DEPOSIT:
-            if booking.status != "APPROVED":
-                return Response(
-                    {"detail": "Deposit can only be paid once your booking is approved."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            amount = property_obj.deposit
-            description = "Deposit"
-
-        else:  # RENT
-            deposit_paid = Payment.objects.filter(
-                booking=booking, phase=Payment.PaymentPhase.DEPOSIT,
-                status=Payment.PaymentStatus.COMPLETED,
-            ).exists()
-            if not deposit_paid or booking.status != "DEPOSIT_PAID":
-                return Response(
-                    {"detail": "Deposit must be completed before paying rent."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            amount = calculate_rent_total(property_obj.monthly_rent, booking.duration_months)
-            description = "Rent"
+        # Calculate full rent amount for the student's stay
+        amount = calculate_rent_total(property_obj.semester_rent, booking.duration_months)
+        description = f"Full Rent BK{booking.id}"
 
         payment = Payment.objects.create(
             booking=booking,
@@ -185,10 +176,7 @@ class MpesaCallbackView(APIView):
                 payment.save()
 
                 booking = payment.booking
-                if payment.phase == Payment.PaymentPhase.DEPOSIT:
-                    booking.status = "DEPOSIT_PAID"
-                else:
-                    booking.status = "CONFIRMED"
+                booking.status = "CONFIRMED"
                 booking.save()
 
             else:

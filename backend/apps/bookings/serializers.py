@@ -23,6 +23,9 @@ class BookingSerializer(serializers.ModelSerializer):
             'duration_months',
             'notes',
             'status',
+            'tenant_signature',
+            'landlord_signature',
+            'lease_signed_at',
             'created_at',
             'updated_at',
         ]

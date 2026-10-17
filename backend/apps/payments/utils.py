@@ -32,6 +32,6 @@ DURATION_TO_SEMESTERS = {
 }
 
 
-def calculate_rent_total(monthly_rent, duration_months):
+def calculate_rent_total(semester_rent, duration_months):
     semesters = DURATION_TO_SEMESTERS.get(duration_months, 1)
-    return float(monthly_rent) * semesters
+    return float(semester_rent) * semesters

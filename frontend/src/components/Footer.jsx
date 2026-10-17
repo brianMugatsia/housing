@@ -1,58 +1,64 @@
 import { Link } from "react-router-dom";
-import { Home, Mail, Phone, Globe } from "lucide-react";
+import { Home, Mail, Phone, Globe, ShieldCheck } from "lucide-react";
 
 const columns = [
   {
-    title: "Company",
+    title: "Platform",
     links: [
-      { label: "About", to: "/" },
-      { label: "Contact", to: "/" },
-      { label: "Help Center", to: "/" },
+      { label: "Browse Accommodations", to: "/houses" },
+      { label: "Verified Hostels", to: "/houses" },
+      { label: "Student Apartments", to: "/houses" },
     ],
   },
   {
-    title: "For Users",
+    title: "Accounts",
     links: [
-      { label: "For Students", to: "/register/student" },
-      { label: "For Landlords", to: "/register/landlord" },
+      { label: "Student Registration", to: "/register/student" },
+      { label: "Landlord Onboarding", to: "/register/landlord" },
+      { label: "Account Login", to: "/login" },
     ],
   },
   {
-    title: "Legal",
+    title: "Security & Trust",
     links: [
-      { label: "Privacy Policy", to: "/" },
-      { label: "Terms", to: "/" },
+      { label: "Direct Booking Approval", to: "/houses" },
+      { label: "M-Pesa Escrow Protection", to: "/" },
+      { label: "Terms of Service", to: "/" },
     ],
   },
 ];
 
 export default function Footer() {
   return (
-    <footer className="border-t border-gray-100 bg-primary">
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
-          <div className="col-span-2">
-            <div className="flex items-center gap-2 text-lg font-bold text-white">
-              <Home className="h-6 w-6" />
-              HomeFind
-            </div>
-            <p className="mt-3 max-w-xs text-sm text-slate-500 text-white">
-              Find a place you can call home. Verified student accommodation near your university.
+    <footer className="border-t border-slate-800 bg-slate-950 text-slate-300">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 gap-10 md:grid-cols-5">
+          {/* Brand Col */}
+          <div className="md:col-span-2 space-y-4">
+            <Link to="/" className="flex items-center gap-2.5 text-xl font-black text-white">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-950 shadow-sm">
+                <Home className="h-5 w-5" />
+              </div>
+              <span>HomeFind</span>
+            </Link>
+            <p className="max-w-sm text-xs leading-relaxed text-slate-400">
+              The premier verified student accommodation portal. Connecting students with trusted landlords near major universities with direct booking approval and photo showcase carousels.
             </p>
-            <div className="mt-4 flex gap-3 text-slate-400">
-              <Mail className="h-5 w-5 hover:text-white" />
-              <Phone className="h-5 w-5 hover:text-white" />
-              <Globe className="h-5 w-5 hover:text-white" />
+            <div className="flex items-center gap-3 pt-2 text-slate-400">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                <ShieldCheck className="h-4 w-4" /> 100% Verified Properties
+              </span>
             </div>
           </div>
 
+          {/* Link Columns */}
           {columns.map((col) => (
-            <div key={col.title}>
-              <h4 className="text-sm font-semibold text-slate-800 text-white">{col.title}</h4>
-              <ul className="mt-3 space-y-2">
+            <div key={col.title} className="space-y-3">
+              <h4 className="text-xs font-black uppercase tracking-wider text-white">{col.title}</h4>
+              <ul className="space-y-2 text-xs">
                 {col.links.map((l) => (
                   <li key={l.label}>
-                    <Link to={l.to} className="text-sm text-slate-500 hover:text-white">
+                    <Link to={l.to} className="text-slate-400 hover:text-white transition-colors">
                       {l.label}
                     </Link>
                   </li>
@@ -62,8 +68,13 @@ export default function Footer() {
           ))}
         </div>
 
-        <div className="mt-10 border-t border-gray-100 pt-6 text-center text-xs text-slate-400">
-          © {new Date().getFullYear()} HomeFind. All rights reserved.
+        <div className="mt-12 border-t border-slate-900 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+          <p>© {new Date().getFullYear()} HomeFind Student Living. All rights reserved.</p>
+          <div className="flex items-center gap-6">
+            <span className="hover:text-slate-400 transition-colors cursor-pointer">Privacy Policy</span>
+            <span className="hover:text-slate-400 transition-colors cursor-pointer">Security Standards</span>
+            <span className="hover:text-slate-400 transition-colors cursor-pointer">Support</span>
+          </div>
         </div>
       </div>
     </footer>

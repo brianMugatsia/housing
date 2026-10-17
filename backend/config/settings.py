@@ -29,6 +29,8 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.dashboard",
     "apps.payments",
+    "apps.maintenance",
+    "apps.messaging",
 ]
 
 MIDDLEWARE = [
@@ -115,6 +117,10 @@ CORS_ALLOWED_ORIGINS = os.getenv(
     "CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:5174"
 ).split(",")
 
+CSRF_TRUSTED_ORIGINS = os.getenv(
+    "CSRF_TRUSTED_ORIGINS", ""
+).split(",") if os.getenv("CSRF_TRUSTED_ORIGINS") else []
+
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 25 * 1024 * 1024
 
@@ -122,8 +128,11 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 25 * 1024 * 1024
 MPESA_CONSUMER_KEY = os.getenv("MPESA_CONSUMER_KEY")
 MPESA_CONSUMER_SECRET = os.getenv("MPESA_CONSUMER_SECRET")
 MPESA_SHORTCODE = os.getenv("MPESA_SHORTCODE", "174379")
+MPESA_STORE_NUMBER = os.getenv("MPESA_STORE_NUMBER", os.getenv("MPESA_SHORTCODE", "174379"))
+MPESA_TILL_NUMBER = os.getenv("MPESA_TILL_NUMBER", os.getenv("MPESA_SHORTCODE", "174379"))
 MPESA_PASSKEY = os.getenv("MPESA_PASSKEY")
 MPESA_CALLBACK_URL = os.getenv("MPESA_CALLBACK_URL")
+MPESA_TRANSACTION_TYPE = os.getenv("MPESA_TRANSACTION_TYPE", "CustomerBuyGoodsOnline")
 MPESA_ENV = os.getenv("MPESA_ENV", "sandbox")  # "sandbox" or "production"
 
 MPESA_BASE_URL = (

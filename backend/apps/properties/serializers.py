@@ -57,7 +57,7 @@ class PropertySerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "distance_from_university",
-            "monthly_rent",
+            "semester_rent",
             "deposit",
             "total_rooms",
             "available_rooms",
@@ -92,7 +92,7 @@ class PropertyWriteSerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "distance_from_university",
-            "monthly_rent",
+            "semester_rent",
             "deposit",
             "total_rooms",
             "available_rooms",
@@ -168,7 +168,7 @@ class PropertyWriteSerializer(serializers.ModelSerializer):
         amenity_names = validated_data.pop("amenities", None)
 
         critical_fields = {
-            "monthly_rent",
+            "semester_rent",
             "deposit",
             "total_rooms",
             "available_rooms",

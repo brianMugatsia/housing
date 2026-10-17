@@ -46,3 +46,12 @@ export const shiftRoom = (bookingId, newHouseNumber) =>
       new_house_number: newHouseNumber,
     })
     .then((r) => r.data);
+
+export const approveBooking = (bookingId) =>
+  api.post(`/bookings/${bookingId}/approve/`).then((r) => r.data);
+
+export const rejectBooking = (bookingId, reason = "") =>
+  api.post(`/bookings/${bookingId}/reject/`, { reason }).then((r) => r.data);
+
+export const updateBookingStatus = (bookingId, status) =>
+  api.patch(`/bookings/${bookingId}/`, { status }).then((r) => r.data);

@@ -1,9 +1,21 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import api from "../../services/api";
-import Card from "../../components/ui/Card";
-import Button from "../../components/ui/Button";
-import { CheckCircle, XCircle, Receipt, Clock, AlertCircle, Building2, User, RefreshCw, Calendar, Phone, ShieldCheck } from "lucide-react";
-import { Link } from "react-router-dom";
+import AdminNav from "../../components/AdminNav";
+import { 
+  CheckCircle, 
+  XCircle, 
+  Receipt, 
+  Clock, 
+  AlertCircle, 
+  Building2, 
+  User, 
+  Calendar, 
+  Phone, 
+  Search,
+  CheckCircle2,
+  ShieldAlert,
+  ArrowRight
+} from "lucide-react";
 
 const PAYMENT_STATUS_STYLE = {
   COMPLETED: { icon: <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />, cls: "bg-emerald-50 text-emerald-700 border-emerald-100" },
@@ -13,13 +25,13 @@ const PAYMENT_STATUS_STYLE = {
 };
 
 const STATUS_VARIANTS = {
-  PENDING: "bg-amber-50 text-amber-700 border-amber-200",
-  APPROVED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  DEPOSIT_PAID: "bg-blue-50 text-blue-700 border-blue-200",
-  CONFIRMED: "bg-indigo-50 text-indigo-700 border-indigo-200",
-  REJECTED: "bg-rose-50 text-rose-700 border-rose-200",
-  CANCELLED: "bg-slate-50 text-slate-700 border-slate-200",
-  VACATED: "bg-slate-100 text-slate-600 border-slate-200",
+  PENDING: { label: "Pending Approval", cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  APPROVED: { label: "Approved (Awaiting Payment)", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  DEPOSIT_PAID: { label: "Payment In Progress", cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  CONFIRMED: { label: "Confirmed Tenant", cls: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  REJECTED: { label: "Rejected", cls: "bg-rose-50 text-rose-700 border-rose-200" },
+  CANCELLED: { label: "Cancelled", cls: "bg-slate-50 text-slate-700 border-slate-200" },
+  VACATED: { label: "Vacated", cls: "bg-slate-100 text-slate-600 border-slate-200" },
 };
 
 export default function AdminBookings() {
@@ -27,8 +39,15 @@ export default function AdminBookings() {
   const [paymentsByBooking, setPaymentsByBooking] = useState({});
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [processingId, setProcessingId] = useState(null);
 
-  const fetchData = async () => {
+  // Reject modal state
+  const [rejectingBooking, setRejectingBooking] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setActionError("");
     try {
@@ -37,8 +56,8 @@ export default function AdminBookings() {
         api.get("/payments/landlord/").catch(() => ({ data: [] })),
       ]);
 
-      const bookingsData = bookingsRes.data.results || bookingsRes.data;
-      const paymentsData = paymentsRes.data.results || paymentsRes.data;
+      const bookingsData = bookingsRes.data.results || bookingsRes.data || [];
+      const paymentsData = paymentsRes.data.results || paymentsRes.data || [];
 
       const grouped = {};
       (Array.isArray(paymentsData) ? paymentsData : []).forEach((p) => {
@@ -51,27 +70,35 @@ export default function AdminBookings() {
       setBookings(Array.isArray(bookingsData) ? bookingsData : []);
       setPaymentsByBooking(grouped);
     } catch (err) {
-      console.error("Failed to load bookings", err);
-      setActionError("Failed to fetch booking requests. Please refresh.");
+      console.error("Failed to load admin bookings", err);
+      setActionError("Failed to fetch system bookings. Please refresh.");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  const handleStatusUpdate = async (id, status) => {
+  const handleStatusUpdate = async (id, status, reason = "") => {
+    setProcessingId(id);
+    setActionError("");
     try {
-      const response = await api.patch(`/bookings/${id}/`, { status });
+      const payload = { status };
+      if (reason) payload.reason = reason;
+
+      const response = await api.patch(`/bookings/${id}/`, payload);
       const updatedBooking = response.data;
 
       setBookings((prevBookings) =>
         prevBookings.map((b) => (b.id === id ? { ...b, ...updatedBooking } : b))
       );
+      if (rejectingBooking) setRejectingBooking(null);
     } catch (err) {
-      alert(err.response?.data?.detail || "Failed to update booking status");
+      setActionError(err.response?.data?.detail || "Failed to update booking status");
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -81,141 +108,345 @@ export default function AdminBookings() {
     if (!payment) return null;
     const style = PAYMENT_STATUS_STYLE[payment.status] || {};
     return (
-      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold ${style.cls}`}>
+      <div className={`flex items-center gap-1.5 px-3 py-1 rounded-xl border text-xs font-bold ${style.cls}`}>
         {style.icon}
         <span>{label}: {formatKES(payment.amount)}</span>
+        {payment.mpesa_receipt_number && (
+          <span className="opacity-60 font-mono text-[10px]">#{payment.mpesa_receipt_number}</span>
+        )}
       </div>
     );
   };
 
+  const counts = useMemo(() => {
+    return bookings.reduce(
+      (acc, b) => {
+        acc.total += 1;
+        if (b.status === "PENDING") acc.pending += 1;
+        if (b.status === "APPROVED") acc.approved += 1;
+        if (b.status === "DEPOSIT_PAID") acc.depositPaid += 1;
+        if (b.status === "CONFIRMED") acc.confirmed += 1;
+        if (b.status === "REJECTED" || b.status === "CANCELLED") acc.rejected += 1;
+        return acc;
+      },
+      { total: 0, pending: 0, approved: 0, depositPaid: 0, confirmed: 0, rejected: 0 }
+    );
+  }, [bookings]);
+
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      if (statusFilter !== "ALL" && b.status !== statusFilter) return false;
+      if (!searchTerm.trim()) return true;
+
+      const term = searchTerm.toLowerCase();
+      const title = (b.property_details?.title || b.property?.title || "").toLowerCase();
+      const studentName = (b.student_name || "").toLowerCase();
+      const phone = (b.student_phone || "").toLowerCase();
+      const unit = String(b.house_number || "").toLowerCase();
+      const landlord = String(b.property_details?.landlord?.full_name || "").toLowerCase();
+
+      return title.includes(term) || studentName.includes(term) || phone.includes(term) || unit.includes(term) || landlord.includes(term);
+    });
+  }, [bookings, statusFilter, searchTerm]);
+
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-6 lg:p-10 animate-fadeIn">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <span className="text-xs font-extrabold uppercase tracking-widest text-primary bg-primary/5 px-3 py-1 rounded-full">
-            Global Control
-          </span>
-          <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">System Bookings</h1>
-          <p className="mt-2 text-slate-500">Overview of all student reservations across the platform.</p>
+      {/* Shared Admin Navigation Header */}
+      <AdminNav 
+        title="Student Bookings & Approvals" 
+        subtitle="Full administrative control to approve, reject, and monitor room reservations across all properties."
+        onRefresh={fetchData}
+        loading={loading}
+      />
+
+      {/* Metrics Row */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Bookings</span>
+          <div className="mt-2 text-2xl font-black text-slate-900">{counts.total}</div>
+          <span className="text-[11px] font-semibold text-slate-500">Across entire platform</span>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            to="/admin/dashboard"
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 transition-all"
-          >
-            <ShieldCheck className="h-4 w-4" />
-            Verification
-          </Link>
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg transition-transform active:scale-95 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
-          </button>
+
+        <div className="rounded-3xl border border-amber-300/80 bg-amber-50/60 p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-800">Pending Approvals</span>
+            <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-ping" />
+          </div>
+          <div className="mt-2 text-2xl font-black text-amber-900">{counts.pending}</div>
+          <span className="text-[11px] font-semibold text-amber-800">Awaiting landlord/admin action</span>
+        </div>
+
+        <div className="rounded-3xl border border-blue-200 bg-blue-50/50 p-6 shadow-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-blue-800">Awaiting Payment</span>
+          <div className="mt-2 text-2xl font-black text-blue-900">{counts.approved}</div>
+          <span className="text-[11px] font-semibold text-blue-700">Approved, pending student checkout</span>
+        </div>
+
+        <div className="rounded-3xl border border-emerald-200 bg-emerald-50/50 p-6 shadow-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">Confirmed Occupants</span>
+          <div className="mt-2 text-2xl font-black text-emerald-900">{counts.confirmed}</div>
+          <span className="text-[11px] font-semibold text-emerald-700">Active students in housing</span>
         </div>
       </div>
 
       {actionError && (
-        <div className="rounded-2xl bg-rose-50 p-4 border border-rose-100 text-rose-700 text-sm font-bold flex items-center gap-3">
-          <AlertCircle className="h-5 w-5" />
-          {actionError}
+        <div className="rounded-2xl bg-rose-50 p-4 border border-rose-100 text-rose-700 text-xs font-bold flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <span>{actionError}</span>
         </div>
       )}
 
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          {[
+            { id: "ALL", label: `All (${counts.total})` },
+            { id: "PENDING", label: `Pending Approval (${counts.pending})` },
+            { id: "APPROVED", label: `Approved (${counts.approved})` },
+            ...(counts.depositPaid > 0 ? [{ id: "DEPOSIT_PAID", label: `Payment In Progress (${counts.depositPaid})` }] : []),
+            { id: "CONFIRMED", label: `Confirmed (${counts.confirmed})` },
+            { id: "REJECTED", label: `Rejected (${counts.rejected})` },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id)}
+              className={`whitespace-nowrap px-4 py-2 text-xs font-black rounded-2xl border transition-all cursor-pointer ${
+                statusFilter === tab.id
+                  ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search student, landlord, unit..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none focus:border-slate-900"
+          />
+        </div>
+      </div>
+
+      {/* Content Section */}
       {loading ? (
-        <div className="flex min-h-[400px] items-center justify-center">
+        <div className="flex min-h-[350px] items-center justify-center">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-900 border-t-transparent" />
         </div>
-      ) : bookings.length === 0 ? (
+      ) : filteredBookings.length === 0 ? (
         <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white p-20 text-center">
-          <Building2 className="mx-auto h-16 w-16 text-slate-200" />
+          <Building2 className="mx-auto h-16 w-16 text-slate-200 stroke-[1.5]" />
           <h3 className="mt-4 text-xl font-bold text-slate-900">Zero Bookings Found</h3>
-          <p className="mt-2 text-slate-500">Wait for students to start making reservations.</p>
+          <p className="mt-2 text-slate-500 text-sm">
+            {statusFilter !== "ALL" ? "No applications found under this filter." : "Student reservations will display here as they are submitted."}
+          </p>
         </div>
       ) : (
         <div className="grid gap-6">
-          {bookings.map((booking) => {
+          {filteredBookings.map((booking) => {
             const title = booking.property_details?.title || booking.property?.title || "Housing Unit";
             const studentName = booking.student_name || "Student User";
             const payments = paymentsByBooking[booking.id] || {};
+            const statusConfig = STATUS_VARIANTS[booking.status] || { label: booking.status, cls: "bg-slate-50 text-slate-700 border-slate-200" };
+            const isProcessing = processingId === booking.id;
+            const landlordInfo = booking.property_details?.landlord?.full_name || "Assigned Landlord";
 
             return (
-              <div key={booking.id} className="group overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:shadow-xl">
+              <div 
+                key={booking.id} 
+                className={`group overflow-hidden rounded-3xl border bg-white p-6 shadow-sm transition-all hover:shadow-xl ${
+                  booking.status === "PENDING" ? "border-amber-300 ring-2 ring-amber-500/10" : "border-slate-200"
+                }`}
+              >
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex-1 space-y-4">
                     <div className="flex items-center gap-3 flex-wrap">
-                      <h3 className="text-xl font-extrabold text-slate-900">{title}</h3>
+                      <h3 className="text-xl font-black text-slate-900">{title}</h3>
                       {booking.house_number && (
-                        <span className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                        <span className="rounded-xl bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 border border-slate-200">
                           Unit #{booking.house_number}
                         </span>
                       )}
-                      <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider ${STATUS_VARIANTS[booking.status] || STATUS_VARIANTS.PENDING}`}>
-                        {booking.status}
+                      <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider ${statusConfig.cls}`}>
+                        {statusConfig.label}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-400">
-                          <User className="h-5 w-5" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                      {/* Student Info */}
+                      <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3.5 border border-slate-100">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-xs text-slate-600">
+                          <User className="h-4 w-4" />
                         </div>
                         <div>
-                          <span className="block text-[10px] font-bold uppercase text-slate-400">Reserved By</span>
-                          <span className="font-bold text-slate-900 leading-tight">{studentName}</span>
-                          {booking.student_phone && <p className="text-[11px] font-medium text-slate-500">{booking.student_phone}</p>}
+                          <span className="block text-[10px] font-bold uppercase text-slate-400">Student Applicant</span>
+                          <span className="font-extrabold text-slate-900 text-sm">{studentName}</span>
+                          {booking.student_phone && (
+                            <a href={`tel:${booking.student_phone}`} className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:underline">
+                              <Phone className="h-3 w-3" /> {booking.student_phone}
+                            </a>
+                          )}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-400">
-                          <Calendar className="h-5 w-5" />
+                      {/* Landlord Info */}
+                      <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3.5 border border-slate-100">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-xs text-slate-600">
+                          <Building2 className="h-4 w-4" />
                         </div>
                         <div>
-                          <span className="block text-[10px] font-bold uppercase text-slate-400">Timeline</span>
-                          <span className="font-bold text-slate-900">{booking.move_in_date || "N/A"}</span>
-                          <p className="text-[11px] font-medium text-slate-500">{booking.duration_months || 1} months stay</p>
+                          <span className="block text-[10px] font-bold uppercase text-slate-400">Property Host</span>
+                          <span className="font-extrabold text-slate-900 text-sm">{landlordInfo}</span>
+                          <span className="text-[11px] text-slate-400 font-medium">Rent: {formatKES(booking.property_details?.semester_rent || 0)}</span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-400">
-                          <Receipt className="h-5 w-5" />
+                      {/* Timeline & Payments */}
+                      <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3.5 border border-slate-100">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-xs text-slate-600">
+                          <Calendar className="h-4 w-4" />
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                          <span className="block text-[10px] font-bold uppercase text-slate-400">Payments</span>
-                          <div className="flex flex-wrap gap-2">
-                            {renderPaymentLine("Deposit", payments.DEPOSIT) || <span className="text-[11px] italic text-slate-400">Deposit unpaid</span>}
-                            {renderPaymentLine("Rent", payments.RENT)}
-                          </div>
+                        <div>
+                          <span className="block text-[10px] font-bold uppercase text-slate-400">Timeline & Stay</span>
+                          <span className="font-extrabold text-slate-900 text-sm">{booking.move_in_date || "Flexible"}</span>
+                          <span className="text-[11px] text-slate-500 font-medium">{booking.duration_months || 1} months contract</span>
                         </div>
                       </div>
                     </div>
+
+                    {/* Payment Indicators */}
+                    {(payments.DEPOSIT || payments.RENT) && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {renderPaymentLine("Deposit", payments.DEPOSIT)}
+                        {renderPaymentLine("Rent", payments.RENT)}
+                      </div>
+                    )}
                   </div>
 
-                  {(booking.status === "PENDING" || booking.status === "DEPOSIT_PAID") && (
-                    <div className="flex items-center gap-3 border-t border-slate-50 pt-6 lg:border-none lg:pt-0">
-                      <Button
-                        onClick={() => handleStatusUpdate(booking.id, "APPROVED")}
-                        className="flex-1 lg:flex-none flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-3 font-bold text-white shadow-lg shadow-emerald-200 transition-all hover:bg-emerald-700 active:scale-95"
+                  {/* Admin Direct Action Buttons */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-4 lg:pt-0 border-t border-slate-100 lg:border-none">
+                    {booking.status === "PENDING" && (
+                      <>
+                        <button
+                          onClick={() => handleStatusUpdate(booking.id, "APPROVED")}
+                          disabled={isProcessing}
+                          className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-3 font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                          {isProcessing ? "Approving..." : "Approve Booking"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRejectingBooking(booking);
+                            setRejectReason("");
+                          }}
+                          disabled={isProcessing}
+                          className="flex items-center justify-center gap-2 rounded-2xl border border-rose-200 px-5 py-3 font-bold text-rose-600 hover:bg-rose-50 active:scale-95 transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          Reject
+                        </button>
+                      </>
+                    )}
+
+                    {booking.status === "APPROVED" && (
+                      <div className="flex flex-col sm:flex-row items-center gap-2">
+                        <span className="text-xs font-bold text-slate-400">Awaiting deposit</span>
+                        <button
+                          onClick={() => handleStatusUpdate(booking.id, "CONFIRMED")}
+                          disabled={isProcessing}
+                          className="flex items-center gap-1.5 rounded-2xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 active:scale-95 transition-all cursor-pointer"
+                        >
+                          <CheckCircle2 className="h-4 w-4" /> Confirm Tenant
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRejectingBooking(booking);
+                            setRejectReason("");
+                          }}
+                          disabled={isProcessing}
+                          className="text-xs font-bold text-rose-600 hover:underline px-2"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+
+                    {booking.status === "DEPOSIT_PAID" && (
+                      <button
+                        onClick={() => handleStatusUpdate(booking.id, "CONFIRMED")}
+                        disabled={isProcessing}
+                        className="flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 font-bold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                       >
-                        <CheckCircle className="h-4 w-4" /> Approve
-                      </Button>
-                      <Button
-                        onClick={() => handleStatusUpdate(booking.id, "REJECTED")}
-                        variant="outline"
-                        className="flex-1 lg:flex-none flex items-center justify-center gap-2 rounded-2xl border-rose-200 px-6 py-3 font-bold text-rose-600 hover:bg-rose-50 transition-colors"
-                      >
-                        <XCircle className="h-4 w-4" /> Reject
-                      </Button>
-                    </div>
-                  )}
+                        <CheckCircle2 className="h-4 w-4" />
+                        {isProcessing ? "Confirming..." : "Confirm Tenant"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {rejectingBooking && (
+        <div 
+          onClick={() => setRejectingBooking(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className="bg-white max-w-md w-full rounded-3xl shadow-2xl border border-slate-200 overflow-hidden"
+          >
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="text-lg font-black text-slate-900">Admin Rejection Note</h3>
+              <button onClick={() => setRejectingBooking(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600">
+                Reject booking for <strong className="text-slate-900">{rejectingBooking.student_name || "this student"}</strong> on property <strong className="text-slate-900">{rejectingBooking.property_details?.title || "this unit"}</strong>.
+              </p>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Administrative Reason / Note
+                </label>
+                <textarea
+                  rows={3}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="e.g. Unit mismatch, invalid contact details..."
+                  className="w-full p-3 border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2.5">
+              <button
+                onClick={() => setRejectingBooking(null)}
+                className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleStatusUpdate(rejectingBooking.id, "REJECTED", rejectReason)}
+                disabled={processingId === rejectingBooking.id}
+                className="px-5 py-2.5 text-xs font-bold text-white bg-rose-600 rounded-xl hover:bg-rose-700 disabled:opacity-50 cursor-pointer"
+              >
+                Confirm Rejection
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

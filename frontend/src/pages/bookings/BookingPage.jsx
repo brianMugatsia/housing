@@ -100,7 +100,7 @@ export default function BookingPage() {
     (d) => d.value === formData.duration_months
   ) || DURATION_OPTIONS[0];
 
-  const semesterRent = Number(property?.monthly_rent) || 0;
+  const semesterRent = Number(property?.semester_rent) || 0;
   const totalRentDue = semesterRent * selectedDuration.semesters;
 
   const handleSubmit = async (e) => {

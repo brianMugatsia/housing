@@ -7,8 +7,9 @@ from apps.bookings.models import Booking
 
 class Payment(models.Model):
     class PaymentPhase(models.TextChoices):
+        RENT = "RENT", "Full Rent"
+        FULL = "FULL", "Full Payment"
         DEPOSIT = "DEPOSIT", "Deposit"
-        RENT = "RENT", "Rent"
 
     class PaymentStatus(models.TextChoices):
         PENDING = "PENDING", "Pending"
