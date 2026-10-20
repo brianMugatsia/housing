@@ -244,3 +244,74 @@ class AdminPaymentsView(generics.ListAPIView):
             qs = qs.filter(phase=phase_filter)
 
         return qs
+
+
+class AdminProcessRefundView(APIView):
+    """
+    Admin approves and processes a 95% refund (retaining a 5% administrative fee)
+    via Safaricom M-Pesa B2C payout API.
+    """
+    permission_classes = [IsAdmin]
+
+    def post(self, request, pk):
+        try:
+            payment = Payment.objects.get(pk=pk)
+        except Payment.DoesNotExist:
+            return Response({"detail": "Payment record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if payment.status != Payment.PaymentStatus.COMPLETED:
+            return Response(
+                {"detail": f"Only completed payments can be refunded. Current status: {payment.status}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if payment.refund_approved:
+            return Response(
+                {"detail": "This payment has already been refunded."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = request.data.get("reason", "Student housing booking cancellation refund.")
+        
+        amount = payment.amount
+        retention_fee = (amount * Decimal("0.05")).quantize(Decimal("0.01"))
+        refund_amount = (amount * Decimal("0.95")).quantize(Decimal("0.01"))
+
+        client = MpesaClient()
+        try:
+            b2c_res = client.b2c_payment(
+                phone_number=payment.phone_number,
+                amount=refund_amount,
+                remarks="95pct Refund",
+                occasion=f"Booking#{payment.booking_id} Refund"
+            )
+        except Exception as exc:
+            logger.exception("M-Pesa B2C refund payout failed")
+            return Response(
+                {"detail": f"Failed to execute M-Pesa B2C payout: {str(exc)}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        with transaction.atomic():
+            payment.refund_approved = True
+            payment.status = Payment.PaymentStatus.REFUNDED
+            payment.refunded_amount = refund_amount
+            payment.retention_fee_amount = retention_fee
+            payment.refund_reason = reason
+            payment.refunded_at = timezone.now()
+            payment.save()
+
+            booking = payment.booking
+            booking.status = "CANCELLED"
+            booking.save()
+
+        return Response(
+            {
+                "detail": "Refund approved and 95% B2C payout initiated successfully.",
+                "original_amount": str(amount),
+                "refunded_amount": str(refund_amount),
+                "retention_fee_5_percent": str(retention_fee),
+                "b2c_response": b2c_res,
+            },
+            status=status.HTTP_200_OK,
+        )

@@ -70,9 +70,20 @@ class Property(models.Model):
 
     semester_rent = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     deposit = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], default=0)
+
+    class DepositPercentage(models.IntegerChoices):
+        FULL = 100, "Full Payment (100%)"
+        QUARTER = 25, "25% Deposit"
+        HALF = 50, "50% Deposit"
+        THREE_QUARTERS = 75, "75% Deposit"
+
+    deposit_percentage = models.IntegerField(
+        choices=DepositPercentage.choices, default=DepositPercentage.FULL
+    )
+
     total_rooms = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     available_rooms = models.PositiveIntegerField(validators=[MinValueValidator(0)])
-    
+
     # Store dynamic unit numbers selected by landlord
     available_room_numbers = models.JSONField(default=list, blank=True)
 

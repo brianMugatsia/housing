@@ -35,23 +35,19 @@ class BookingListCreateView(APIView):
         room_num = serializer.validated_data.get('house_number')
 
         with transaction.atomic():
-            # Lock the property row so concurrent booking requests for the
-            # same room can't both pass the "is it still available" check.
-            prop = Property.objects.select_for_update().get(pk=prop_id)
+            prop = Property.objects.select_for_update().get(pk=prop_id)     
 
             available_list = prop.available_room_numbers or []
             if room_num and isinstance(available_list, list) and available_list:
                 if room_num not in available_list:
                     return Response(
-                        {'house_number': f"Unit {room_num} is no longer available for booking."},
+                        {'house_number': f"Unit {room_num} is no longer available."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-                available_list.remove(room_num)
-                prop.available_room_numbers = available_list
-                prop.available_rooms = max(0, len(available_list))
-                prop.save()
+                # Note: We do NOT remove the room from available_room_numbers here on PENDING.
+                # It remains visible in public listings until approved/confirmed by the landlord.
 
-            booking = serializer.save(student=request.user)
+            booking = serializer.save(student=request.user, status='PENDING')
 
         return Response(BookingSerializer(booking, context={'request': request}).data, status=status.HTTP_201_CREATED)
 

@@ -16,6 +16,7 @@ import {
 import { Link } from "react-router-dom";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
 import AdminNav from "../../components/AdminNav";
 import ImageCarousel from "../../components/ImageCarousel";
 
@@ -38,10 +39,11 @@ const getPropertyStatus = (prop) => {
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  
+  const { addToast } = useToast();
+
   // Data States
   const [properties, setProperties] = useState([]);
-  const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
+  const [pendingBookingsCount, setPendingBookingsCount] = useState(0);    
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("PENDING");
   const [searchTerm, setSearchTerm] = useState("");
@@ -65,16 +67,17 @@ export default function AdminDashboard() {
 
       const rawProps = Array.isArray(propsRes.data) ? propsRes.data : propsRes.data?.results || [];
       const rawBookings = Array.isArray(bookingsRes.data) ? bookingsRes.data : bookingsRes.data?.results || [];
-      
+
       setProperties(rawProps);
       setPendingBookingsCount(rawBookings.filter((b) => b.status === "PENDING").length);
     } catch (fallbackErr) {
       console.error("Failed to fetch properties:", fallbackErr);
       setActionError("Failed to load listings. Please refresh.");
+      addToast("Failed to load listings. Please refresh.", "error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => {
     fetchProperties();
@@ -87,15 +90,15 @@ export default function AdminDashboard() {
 
       if (!searchTerm.trim()) return true;
       const term = searchTerm.toLowerCase();
-      const titleMatch = prop.title?.toLowerCase().includes(term);
+      const titleMatch = prop.title?.toLowerCase().includes(term);        
       const townMatch = prop.town?.toLowerCase().includes(term);
-      const countyMatch = prop.county?.toLowerCase().includes(term);
-      const typeMatch = prop.property_type?.toLowerCase().includes(term);
-      
-      const landlordMatch = 
-        typeof prop.landlord === "object" 
+      const countyMatch = prop.county?.toLowerCase().includes(term);      
+      const typeMatch = prop.property_type?.toLowerCase().includes(term); 
+
+      const landlordMatch =
+        typeof prop.landlord === "object"
           ? prop.landlord?.full_name?.toLowerCase().includes(term) || prop.landlord?.email?.toLowerCase().includes(term)
-          : String(prop.landlord || "").toLowerCase().includes(term);
+          : String(prop.landlord || "").toLowerCase().includes(term);     
 
       return titleMatch || townMatch || countyMatch || typeMatch || landlordMatch;
     });
@@ -124,8 +127,11 @@ export default function AdminDashboard() {
           item.id === id ? { ...item, verification_status: "APPROVED", is_verified: true } : item
         )
       );
+      addToast("Property successfully approved!", "success");
     } catch (err) {
-      setActionError(err.response?.data?.detail || "Failed to approve property.");
+      const msg = err.response?.data?.detail || "Failed to approve property.";
+      setActionError(msg);
+      addToast(msg, "error");
     } finally {
       setProcessingId(null);
     }
@@ -134,6 +140,7 @@ export default function AdminDashboard() {
   const handleConfirmReject = async () => {
     if (!rejectReason.trim()) {
       setActionError("Please select or enter a rejection reason.");
+      addToast("Please select or enter a rejection reason.", "warning");
       return;
     }
     setActionError("");
@@ -149,8 +156,11 @@ export default function AdminDashboard() {
       );
       setRejectingProp(null);
       setRejectReason("");
+      addToast("Property listing rejected.", "info");
     } catch (err) {
-      setActionError(err.response?.data?.detail || "Failed to reject property.");
+      const msg = err.response?.data?.detail || "Failed to reject property.";
+      setActionError(msg);
+      addToast(msg, "error");
     } finally {
       setProcessingId(null);
     }

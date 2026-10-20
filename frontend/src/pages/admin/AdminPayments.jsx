@@ -7,27 +7,32 @@ import {
   AlertCircle,
   Search,
   Download,
+  RotateCcw,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import api from "../../services/api";
 import AdminNav from "../../components/AdminNav";
+import { useToast } from "../../context/ToastContext";
 
 const STATUS_STYLE = {
   COMPLETED: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, cls: "bg-emerald-100 text-emerald-800" },
   PENDING: { icon: <Clock className="h-3.5 w-3.5" />, cls: "bg-amber-100 text-amber-800" },
   FAILED: { icon: <XCircle className="h-3.5 w-3.5" />, cls: "bg-rose-100 text-rose-800" },
   CANCELLED: { icon: <XCircle className="h-3.5 w-3.5" />, cls: "bg-slate-100 text-slate-600" },
+  REFUNDED: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, cls: "bg-indigo-100 text-indigo-800" },
 };
 
 export default function AdminPayments() {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [processingId, setProcessingId] = useState(null);
 
   const [statusFilter, setStatusFilter] = useState("");
   const [phaseFilter, setPhaseFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const { addToast } = useToast();
 
   const fetchPayments = useCallback(async () => {
     setLoading(true);
@@ -43,16 +48,43 @@ export default function AdminPayments() {
     } catch (err) {
       console.error("Failed to fetch payments:", err);
       setError("Failed to load payments. Please try again.");
+      addToast("Failed to load payments.", "error");
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, phaseFilter]);
+  }, [statusFilter, phaseFilter, addToast]);
 
   useEffect(() => {
     fetchPayments();
   }, [fetchPayments]);
 
   const formatKES = (amount) => `KES ${Number(amount || 0).toLocaleString("en-KE")}`;
+
+  const handleProcessRefund = async (payment) => {
+    const amountNum = Number(payment.amount || 0);
+    const retentionFee = amountNum * 0.05;
+    const refundAmount = amountNum * 0.95;
+
+    if (!window.confirm(`Approve 95% Refund for ${payment.student_name || "Student"}?\n\n- Original Amount: KES ${amountNum.toLocaleString()}\n- 5% Admin Fee Retention: KES ${retentionFee.toLocaleString()}\n- 95% Refund Payout: KES ${refundAmount.toLocaleString()}`)) {
+      return;
+    }
+
+    setProcessingId(payment.id);
+    setError("");
+    try {
+      await api.post(`/payments/admin/${payment.id}/refund/`, {
+        reason: "Admin approved 95% refund with 5% retention fee",
+      });
+      addToast("Refund approved and 95% B2C payout initiated successfully!", "success");
+      fetchPayments();
+    } catch (err) {
+      const msg = err.response?.data?.detail || "Failed to process refund.";
+      setError(msg);
+      addToast(msg, "error");
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
   const filteredPayments = payments.filter((p) => {
     if (!searchTerm.trim()) return true;
@@ -167,6 +199,7 @@ export default function AdminPayments() {
           <option value="PENDING">Pending</option>
           <option value="FAILED">Failed</option>
           <option value="CANCELLED">Cancelled</option>
+          <option value="REFUNDED">Refunded</option>
         </select>
 
         <select
@@ -223,7 +256,8 @@ export default function AdminPayments() {
                   <th className="px-4 py-3 text-right">Amount</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">M-Pesa Receipt</th>
-                  <th className="px-4 py-3 rounded-r-2xl">Date</th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3 rounded-r-2xl text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -232,6 +266,9 @@ export default function AdminPayments() {
                     icon: null,
                     cls: "bg-slate-100 text-slate-700",
                   };
+                  const isProcessing = processingId === p.id;
+                  const canRefund = p.status === "COMPLETED" && !p.refund_approved;
+
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3.5 font-bold text-slate-900">
@@ -241,7 +278,10 @@ export default function AdminPayments() {
                         </span>
                       </td>
                       <td className="px-4 py-3.5 text-slate-700 font-medium">{p.landlord_name}</td>
-                      <td className="px-4 py-3.5 text-slate-700 font-medium">{p.student_name}</td>
+                      <td className="px-4 py-3.5 text-slate-700 font-medium">
+                        {p.student_name}
+                        {p.phone_number && <span className="block text-[10px] text-slate-400 font-mono">{p.phone_number}</span>}
+                      </td>
                       <td className="px-4 py-3.5">
                         <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
                           {p.phase}
@@ -256,6 +296,11 @@ export default function AdminPayments() {
                         >
                           {style.icon} {p.status}
                         </span>
+                        {p.refund_approved && (
+                          <span className="block text-[10px] font-semibold text-indigo-600 mt-0.5">
+                            Refunded (95%): {formatKES(p.refunded_amount)}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3.5 font-mono text-[11px] font-bold text-slate-700">
                         {p.mpesa_receipt_number || "—"}
@@ -264,6 +309,24 @@ export default function AdminPayments() {
                         {p.transaction_date
                           ? new Date(p.transaction_date).toLocaleDateString("en-KE")
                           : new Date(p.created_at).toLocaleDateString("en-KE")}
+                      </td>
+                      <td className="px-4 py-3.5 text-right">
+                        {canRefund ? (
+                          <button
+                            onClick={() => handleProcessRefund(p)}
+                            disabled={isProcessing}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            <RotateCcw className={`h-3 w-3 ${isProcessing ? "animate-spin" : ""}`} />
+                            {isProcessing ? "Processing..." : "Refund 95%"}
+                          </button>
+                        ) : p.refund_approved ? (
+                          <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-200">
+                            Processed
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
                       </td>
                     </tr>
                   );

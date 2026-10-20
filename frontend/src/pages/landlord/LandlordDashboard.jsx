@@ -15,12 +15,14 @@ import {
   Phone,
   RefreshCw,
   Wrench,
-  MessageSquare
+  MessageSquare,
+  Sparkles
 } from "lucide-react";
 import api from "../../services/api";
 import { vacateBooking, shiftRoom, approveBooking, rejectBooking } from "../../services/properties";
 import MaintenanceSection from "../../components/MaintenanceSection";
 import ChatModal from "../../components/ChatModal";
+import { useToast } from "../../context/ToastContext";
 
 export default function LandlordDashboard() {
   const [bookings, setBookings] = useState([]);
@@ -31,6 +33,7 @@ export default function LandlordDashboard() {
   const [activeTab, setActiveTab] = useState("overview"); // "overview" | "maintenance"
   const [chatOpen, setChatOpen] = useState(false);
   const [chatRecipient, setChatRecipient] = useState({ id: null, name: "" });
+  const { addToast } = useToast();
 
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
@@ -45,126 +48,146 @@ export default function LandlordDashboard() {
       setBookings(Array.isArray(bData) ? bData : []);
       setProperties(Array.isArray(pData) ? pData : []);
     } catch (err) {
-      console.error("Failed to load landlord dashboard data:", err);
-      setError("Unable to load latest dashboard data.");
+      console.error("Failed to load landlord dashboard:", err);
+      setError("Failed to load dashboard data. Please try again.");
+      addToast("Failed to load dashboard data.", "error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  const handleApprove = async (bookingId) => {
-    setActionId(bookingId);
-    try {
-      await approveBooking(bookingId);
-      await fetchDashboardData();
-    } catch (err) {
-      alert(err.response?.data?.detail || "Failed to approve booking.");
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const handleReject = async (bookingId) => {
-    const reason = window.prompt("Reason for rejecting booking (optional):");
-    if (reason === null) return;
-    setActionId(bookingId);
-    try {
-      await rejectBooking(bookingId, reason);
-      await fetchDashboardData();
-    } catch (err) {
-      alert(err.response?.data?.detail || "Failed to reject booking.");
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const handleVacate = async (bookingId) => {
-    if (!window.confirm("Confirm tenant checkout? This will free up 1 available unit.")) return;
-    try {
-      await vacateBooking(bookingId);
-      await fetchDashboardData();
-    } catch (err) {
-      console.error("Failed to process checkout:", err);
-      alert(err.response?.data?.error || "Failed to process checkout.");
-    }
-  };
-
-  const handleShiftRoom = async (bookingId, currentRoom) => {
-    const newRoom = window.prompt("Enter new room/house number:", currentRoom);
-    if (!newRoom || newRoom === currentRoom) return;
-
-    try {
-      await shiftRoom(bookingId, newRoom);
-      await fetchDashboardData();
-    } catch (err) {
-      console.error("Failed to update room number:", err);
-      alert(err.response?.data?.error || "Failed to update room number.");
-    }
-  };
+  const formatKES = (amt) => `KES ${Number(amt || 0).toLocaleString("en-KE")}`;
 
   const pendingBookings = bookings.filter((b) => b.status === "PENDING");
-  const activeTenants = bookings.filter(
-    (b) => b.status === "APPROVED" || b.status === "CONFIRMED" || b.status === "DEPOSIT_PAID"
-  );
+  const activeTenants = bookings.filter((b) => ["APPROVED", "DEPOSIT_PAID", "CONFIRMED"].includes(b.status));
 
-  const semesterRevenue = activeTenants.reduce((acc, booking) => {
-    return acc + Number(booking.property_details?.semester_rent || 0);
+  const semesterRevenue = activeTenants.reduce((sum, b) => {
+    const rent = Number(b.property_details?.semester_rent || b.semester_rent || 0);
+    return sum + rent;
   }, 0);
 
-  const formatKES = (amount) => `KES ${Number(amount || 0).toLocaleString("en-KE")}`;
+  const handleApprove = async (id) => {
+    setActionId(id);
+    try {
+      await approveBooking(id);
+      setBookings((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, status: "APPROVED" } : b))
+      );
+      addToast("Booking approved successfully!", "success");
+    } catch (err) {
+      const msg = err.response?.data?.detail || "Failed to approve booking.";
+      setError(msg);
+      addToast(msg, "error");
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleReject = async (id) => {
+    setActionId(id);
+    try {
+      await rejectBooking(id);
+      setBookings((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, status: "REJECTED" } : b))
+      );
+      addToast("Booking request rejected.", "info");
+    } catch (err) {
+      const msg = err.response?.data?.detail || "Failed to reject booking.";
+      setError(msg);
+      addToast(msg, "error");
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleVacate = async (id) => {
+    if (!window.confirm("Are you sure you want to check out this tenant?")) return;
+    try {
+      await vacateBooking(id);
+      setBookings((prev) => prev.filter((b) => b.id !== id));
+      addToast("Tenant checked out successfully.", "success");
+    } catch (err) {
+      const msg = err.response?.data?.detail || "Failed to check out tenant.";
+      setError(msg);
+      addToast(msg, "error");
+    }
+  };
+
+  const handleShiftRoom = async (id, currentRoom) => {
+    const newRoom = prompt("Enter new room/house number for tenant:", currentRoom || "");
+    if (!newRoom) return;
+    try {
+      await shiftRoom(id, newRoom);
+      setBookings((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, house_number: newRoom } : b))
+      );
+      addToast("Tenant room reassigned successfully!", "success");
+    } catch (err) {
+      const msg = err.response?.data?.detail || "Failed to shift room.";
+      setError(msg);
+      addToast(msg, "error");
+    }
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-6 lg:p-10 animate-fadeIn">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <span className="text-xs font-black uppercase tracking-wider text-primary bg-primary/10 px-3.5 py-1 rounded-full">
-            Landlord Overview
-          </span>
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
-            Property Management
-          </h1>
-          <p className="mt-1 text-slate-500 text-sm">
-            Monitor reservations, review pending tenant requests, and oversee occupied properties.
-          </p>
-        </div>
+      {/* Top Glassmorphism Banner */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-8 text-white shadow-2xl">
+        <div className="absolute -right-10 -top-10 h-64 w-64 rounded-full bg-primary/20 blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+          <div className="space-y-2">
+            <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-400 bg-amber-400/10 px-3.5 py-1 rounded-full border border-amber-400/20">
+              <Sparkles className="h-3.5 w-3.5" /> Landlord Portal
+            </span>
+            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
+              Property Management & Leasing
+            </h1>
+            <p className="text-slate-300 text-sm max-w-2xl font-medium">
+              Monitor reservations, review pending tenant applications in real-time, and oversee occupied properties across campuses.
+            </p>
+          </div>
 
-        <div className="flex items-center gap-3">
-          <Link
-            to="/landlord/properties/new"
-            className="rounded-2xl bg-slate-900 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-slate-900/10 hover:bg-slate-800 transition-all cursor-pointer"
-          >
-            + Add New Property
-          </Link>
-          <button
-            onClick={fetchDashboardData}
-            disabled={loading}
-            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-700 shadow-xs hover:bg-slate-50 cursor-pointer"
-            title="Refresh"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
+          <div className="flex items-center gap-3 shrink-0">
+            <Link
+              to="/landlord/properties/new"
+              className="rounded-2xl bg-white px-6 py-3.5 text-xs font-black text-slate-900 shadow-xl hover:bg-slate-100 active:scale-95 transition-all cursor-pointer"
+            >
+              + Add New Property
+            </Link>
+            <button
+              onClick={fetchDashboardData}
+              disabled={loading}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 border border-white/20 text-white shadow-lg hover:bg-white/20 active:scale-95 transition-all cursor-pointer"
+              title="Refresh Data"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-3 border-b border-slate-200 pb-3">
+      <div className="flex items-center gap-3 border-b border-slate-200/80 pb-3">
         <button
           onClick={() => setActiveTab("overview")}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === "overview" ? "bg-slate-900 text-white shadow-sm" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+          className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black transition-all cursor-pointer ${
+            activeTab === "overview" 
+              ? "bg-slate-900 text-white shadow-lg shadow-slate-900/10 scale-105" 
+              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80 shadow-xs"
           }`}
         >
           <Building2 className="h-4 w-4" /> Bookings & Occupants
         </button>
         <button
           onClick={() => setActiveTab("maintenance")}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === "maintenance" ? "bg-slate-900 text-white shadow-sm" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+          className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black transition-all cursor-pointer ${
+            activeTab === "maintenance" 
+              ? "bg-slate-900 text-white shadow-lg shadow-slate-900/10 scale-105" 
+              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80 shadow-xs"
           }`}
         >
           <Wrench className="h-4 w-4" /> Maintenance Tickets
@@ -172,62 +195,64 @@ export default function LandlordDashboard() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-2xl bg-red-50 p-4 text-xs font-bold text-red-700 border border-red-200">
+        <div className="flex items-center gap-2 rounded-2xl bg-rose-50 p-4 text-xs font-bold text-rose-700 border border-rose-200">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {activeTab === "maintenance" ? (
-        <MaintenanceSection isLandlord={true} />
+        <div className="animate-slideInUp">
+          <MaintenanceSection isLandlord={true} />
+        </div>
       ) : (
-        <>
+        <div className="space-y-8 animate-slideInUp">
           {/* Metrics Row */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="group rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Monthly Revenue</span>
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                  <TrendingUp className="h-5 w-5" />
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">Monthly Revenue</span>
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300">
+                  <TrendingUp className="h-6 w-6" />
                 </div>
               </div>
-              <div className="mt-3 text-2xl font-black text-slate-900">{formatKES(semesterRevenue)}</div>
-              <span className="mt-1 block text-[11px] font-semibold text-emerald-600">From active tenants</span>
+              <div className="mt-4 text-2xl font-black text-slate-900">{formatKES(semesterRevenue)}</div>
+              <span className="mt-1.5 block text-[11px] font-semibold text-emerald-600">From active tenants</span>
             </div>
 
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+            <div className="group rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Pending Approvals</span>
-                <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${pendingBookings.length > 0 ? "bg-amber-100 text-amber-700 animate-pulse" : "bg-slate-100 text-slate-400"}`}>
-                  <Clock className="h-5 w-5" />
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">Pending Approvals</span>
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${pendingBookings.length > 0 ? "bg-amber-100 text-amber-700 animate-pulse" : "bg-slate-100 text-slate-400"} group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300`}>
+                  <Clock className="h-6 w-6" />
                 </div>
               </div>
-              <div className="mt-3 text-2xl font-black text-slate-900">{pendingBookings.length}</div>
-              <span className={`mt-1 block text-[11px] font-semibold ${pendingBookings.length > 0 ? "text-amber-700" : "text-slate-400"}`}>
+              <div className="mt-4 text-2xl font-black text-slate-900">{pendingBookings.length}</div>
+              <span className={`mt-1.5 block text-[11px] font-semibold ${pendingBookings.length > 0 ? "text-amber-700" : "text-slate-400"}`}>
                 {pendingBookings.length > 0 ? "Immediate action required" : "All requests reviewed"}
               </span>
             </div>
 
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+            <div className="group rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Occupied Units</span>
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                  <UserCheck className="h-5 w-5" />
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">Occupied Units</span>
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
+                  <UserCheck className="h-6 w-6" />
                 </div>
               </div>
-              <div className="mt-3 text-2xl font-black text-slate-900">{activeTenants.length}</div>
-              <span className="mt-1 block text-[11px] font-semibold text-indigo-600">Active student occupants</span>
+              <div className="mt-4 text-2xl font-black text-slate-900">{activeTenants.length}</div>
+              <span className="mt-1.5 block text-[11px] font-semibold text-indigo-600">Active student occupants</span>
             </div>
 
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+            <div className="group rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Listings</span>
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
-                  <Building2 className="h-5 w-5" />
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">Total Listings</span>
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 group-hover:bg-slate-900 group-hover:text-white transition-colors duration-300">
+                  <Building2 className="h-6 w-6" />
                 </div>
               </div>
-              <div className="mt-3 text-2xl font-black text-slate-900">{properties.length}</div>
-              <span className="mt-1 block text-[11px] font-semibold text-slate-500">Properties on platform</span>
+              <div className="mt-4 text-2xl font-black text-slate-900">{properties.length}</div>
+              <span className="mt-1.5 block text-[11px] font-semibold text-slate-500">Properties on platform</span>
             </div>
           </div>
 
@@ -253,7 +278,7 @@ export default function LandlordDashboard() {
                 {pendingBookings.map((b) => (
                   <div
                     key={b.id}
-                    className="flex flex-col justify-between rounded-2xl border border-amber-200 bg-white p-5 shadow-sm space-y-4"
+                    className="flex flex-col justify-between rounded-2xl border border-amber-200 bg-white p-5 shadow-sm space-y-4 hover:shadow-md transition-all"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2">
@@ -332,7 +357,7 @@ export default function LandlordDashboard() {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs text-slate-600">
-                  <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-400">
+                  <thead className="bg-slate-50 text-[11px] uppercase font-black text-slate-400 tracking-wider">
                     <tr>
                       <th className="px-4 py-3 rounded-l-xl">Tenant</th>
                       <th className="px-4 py-3">Phone</th>
@@ -346,25 +371,25 @@ export default function LandlordDashboard() {
                   <tbody className="divide-y divide-slate-100">
                     {activeTenants.map((booking) => (
                       <tr key={booking.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-3 font-bold text-slate-900">
+                        <td className="px-4 py-3.5 font-bold text-slate-900">
                           {booking.student_name || "Student Tenant"}
                         </td>
-                        <td className="px-4 py-3 font-mono text-slate-600">
+                        <td className="px-4 py-3.5 font-mono text-slate-600">
                           {booking.student_phone || "—"}
                         </td>
-                        <td className="px-4 py-3 font-semibold text-slate-800">
+                        <td className="px-4 py-3.5 font-semibold text-slate-800">
                           {booking.property_details?.title || `Property #${booking.property}`}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3.5">
                           <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-mono font-bold text-slate-800 border border-slate-200">
                             {booking.house_number || "Unassigned"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-extrabold text-slate-900">
+                        <td className="px-4 py-3.5 font-extrabold text-slate-900">
                           {formatKES(booking.property_details?.semester_rent || 0)}
                         </td>
-                        <td className="px-4 py-3 text-slate-500">{booking.move_in_date || "—"}</td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3.5 text-slate-500">{booking.move_in_date || "—"}</td>
+                        <td className="px-4 py-3.5 text-right">
                           <div className="inline-flex items-center gap-1.5 justify-end">
                             <button
                               onClick={() => { setChatRecipient({ id: booking.student, name: booking.student_name || "Tenant" }); setChatOpen(true); }}
@@ -396,7 +421,7 @@ export default function LandlordDashboard() {
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {/* Chat Modal */}

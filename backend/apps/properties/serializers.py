@@ -59,6 +59,7 @@ class PropertySerializer(serializers.ModelSerializer):
             "distance_from_university",
             "semester_rent",
             "deposit",
+            "deposit_percentage",
             "total_rooms",
             "available_rooms",
             "available_room_numbers",
@@ -94,6 +95,7 @@ class PropertyWriteSerializer(serializers.ModelSerializer):
             "distance_from_university",
             "semester_rent",
             "deposit",
+            "deposit_percentage",
             "total_rooms",
             "available_rooms",
             "available_room_numbers",
@@ -170,6 +172,7 @@ class PropertyWriteSerializer(serializers.ModelSerializer):
         critical_fields = {
             "semester_rent",
             "deposit",
+            "deposit_percentage",
             "total_rooms",
             "available_rooms",
             "county",

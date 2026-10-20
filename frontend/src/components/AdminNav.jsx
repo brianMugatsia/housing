@@ -1,5 +1,5 @@
-import { Link, useLocation } from "react-router-dom";
-import { ShieldCheck, CalendarCheck, Receipt, RefreshCw } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ShieldCheck, CalendarCheck, Receipt, RefreshCw, ArrowLeft } from "lucide-react";
 
 export default function AdminNav({ 
   onRefresh, 
@@ -8,11 +8,12 @@ export default function AdminNav({
   subtitle = "Manage platform operations" 
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const navItems = [
     { to: "/admin/dashboard", label: "Property Verification", icon: ShieldCheck },
     { to: "/admin/bookings", label: "Student Bookings & Approvals", icon: CalendarCheck },
-    { to: "/admin/payments", label: "Financial Records", icon: Receipt },
+    { to: "/admin/payments", label: "Financial Records", icon: Receipt },   
   ];
 
   return (
@@ -20,22 +21,31 @@ export default function AdminNav({
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <span className="text-xs font-black uppercase tracking-wider text-primary bg-primary/10 px-3.5 py-1 rounded-full">
-            Platform Administration
-          </span>
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
-            {title}
-          </h1>
-          <p className="mt-1 text-slate-500 text-sm">
-            {subtitle}
-          </p>
+          <button
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-900 mb-3 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back</span>
+          </button>
+          <div>
+            <span className="text-xs font-black uppercase tracking-wider text-primary bg-primary/10 px-3.5 py-1 rounded-full">
+              Platform Administration
+            </span>
+            <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
+              {title}
+            </h1>
+            <p className="mt-1 text-slate-500 text-sm">
+              {subtitle}
+            </p>
+          </div>
         </div>
 
         {onRefresh && (
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="flex items-center gap-2 rounded-2xl bg-white px-5 py-2.5 text-xs font-bold text-slate-700 border border-slate-200 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-all cursor-pointer self-start"
+            className="flex items-center gap-2 rounded-2xl bg-white px-5 py-2.5 text-xs font-bold text-slate-700 border border-slate-200 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-all cursor-pointer self-start"  
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh Data

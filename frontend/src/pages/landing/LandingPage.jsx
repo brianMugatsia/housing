@@ -4,6 +4,7 @@ import HowItWorks from "./sections/HowItWorks";
 import FeaturedHouses from "./sections/FeaturedHouses";
 import Universities from "./sections/Universities";
 import Testimonials from "./sections/Testimonials";
+import PoliciesAndSupport from "./sections/PoliciesAndSupport";
 import CTA from "./sections/CTA";
 
 export default function LandingPage() {
@@ -15,6 +16,7 @@ export default function LandingPage() {
       <FeaturedHouses />
       <Universities />
       <Testimonials />
+      <PoliciesAndSupport />
       <CTA />
     </>
   );

@@ -156,6 +156,55 @@ class MpesaClient:
         }
         response = requests.post(self.reversal_url, json=payload, headers=headers)
         if response.status_code != 200:
-            print(f"Daraja Reversal Error Response: {response.text}")
+            print(f"Daraja Reversal Error Response: {response.text}")       
+        response.raise_for_status()
+        return response.json()
+
+    def b2c_payment(self, phone_number, amount, remarks="Booking Refund 95pct", occasion="Refund"):
+        access_token = self.get_access_token()
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
+        initiator_name = getattr(settings, "MPESA_INITIATOR_NAME", "testinitiator")
+        security_credential = getattr(settings, "MPESA_SECURITY_CREDENTIAL", "")
+
+        payload = {
+            "InitiatorName": initiator_name,
+            "SecurityCredential": security_credential,
+            "CommandID": "BusinessPayment",
+            "Amount": int(amount),
+            "PartyA": self.shortcode,
+            "PartyB": phone_number,
+            "Remarks": remarks,
+            "QueueTimeoutURL": self.callback_url,
+            "ResultURL": self.callback_url,
+            "Occasion": occasion,
+        }
+        response = requests.post(self.b2c_url, json=payload, headers=headers)
+        if response.status_code != 200:
+            print(f"Daraja B2C Error Response: {response.text}")
+        response.raise_for_status()
+        return response.json()
+
+    def account_balance(self, initiator, security_credential, result_url, queue_timeout_url, remarks="Account Balance Query"):
+        access_token = self.get_access_token()
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "Initiator": initiator,
+            "SecurityCredential": security_credential,
+            "CommandID": "AccountBalance",
+            "PartyA": self.shortcode,
+            "IdentifierType": "4",
+            "Remarks": remarks,
+            "ResultURL": result_url,
+            "QueueTimeoutURL": queue_timeout_url,
+        }
+        response = requests.post(self.account_balance_url, json=payload, headers=headers)
+        if response.status_code != 200:
+            print(f"Daraja Account Balance Error Response: {response.text}")
         response.raise_for_status()
         return response.json()

@@ -16,6 +16,8 @@ class Payment(models.Model):
         COMPLETED = "COMPLETED", "Completed"
         FAILED = "FAILED", "Failed"
         CANCELLED = "CANCELLED", "Cancelled"
+        REFUNDED = "REFUNDED", "Refunded"
+        REFUND_PENDING = "REFUND_PENDING", "Refund Pending"
 
     booking = models.ForeignKey(
         Booking, on_delete=models.CASCADE, related_name="payments"
@@ -23,21 +25,28 @@ class Payment(models.Model):
     student = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="payments"
     )
-    phase = models.CharField(max_length=10, choices=PaymentPhase.choices)
+    phase = models.CharField(max_length=10, choices=PaymentPhase.choices)   
     amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(1)])
     phone_number = models.CharField(max_length=15, help_text="Format: 2547XXXXXXXX")
 
     status = models.CharField(
-        max_length=10, choices=PaymentStatus.choices, default=PaymentStatus.PENDING
+        max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING
     )
 
-    merchant_request_id = models.CharField(max_length=100, blank=True)
+    merchant_request_id = models.CharField(max_length=100, blank=True)      
     checkout_request_id = models.CharField(max_length=100, blank=True, unique=True, null=True)
 
-    mpesa_receipt_number = models.CharField(max_length=50, blank=True)
+    mpesa_receipt_number = models.CharField(max_length=50, blank=True)      
     result_code = models.IntegerField(null=True, blank=True)
     result_desc = models.CharField(max_length=255, blank=True)
     transaction_date = models.DateTimeField(null=True, blank=True)
+
+    # 95% Refund & 5% Retention Fee Tracking
+    refund_approved = models.BooleanField(default=False)
+    refunded_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    retention_fee_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    refund_reason = models.TextField(blank=True, null=True)
+    refunded_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
