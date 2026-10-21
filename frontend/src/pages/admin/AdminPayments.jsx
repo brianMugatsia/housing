@@ -103,10 +103,18 @@ export default function AdminPayments() {
         acc.completedCount += 1;
         acc.completedAmount += Number(p.amount) || 0;
       }
+      if (p.refund_approved || p.status === "REFUNDED") {
+        acc.refundCount += 1;
+        acc.refundedAmount += Number(p.refunded_amount || (p.amount * 0.95)) || 0;
+        acc.retentionAmount += Number(p.retention_fee_amount || (p.amount * 0.05)) || 0;
+      }
       return acc;
     },
-    { completedCount: 0, completedAmount: 0 }
+    { completedCount: 0, completedAmount: 0, refundCount: 0, refundedAmount: 0, retentionAmount: 0 }
   );
+
+  const totalCommission = totals.completedAmount * 0.07;
+  const landlordShare = totals.completedAmount * 0.93;
 
   const handleExportPDF = () => {
     const doc = new jsPDF();
@@ -156,23 +164,69 @@ export default function AdminPayments() {
         loading={loading}
       />
 
-      {/* Summary Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Summary Metrics & Rates */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Completed Transactions
-          </span>
-          <div className="text-3xl font-black text-slate-900 mt-2">{totals.completedCount}</div>
-          <span className="text-[11px] font-semibold text-emerald-600">Successfully settled</span>
-        </div>
-        <div className="rounded-3xl border border-emerald-200 bg-emerald-50/50 p-6 shadow-sm">
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
             Total Volume Collected
           </span>
-          <div className="text-3xl font-black text-emerald-700 mt-2">
-            {formatKES(totals.completedAmount)}
+          <div className="text-2xl font-black text-slate-900 mt-2">{formatKES(totals.completedAmount)}</div>
+          <span className="text-[11px] font-semibold text-emerald-600">{totals.completedCount} completed transactions</span>
+        </div>
+
+        <div className="rounded-3xl border border-indigo-200 bg-indigo-50/50 p-6 shadow-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-indigo-800">
+            Platform Commission (7%)
+          </span>
+          <div className="text-2xl font-black text-indigo-700 mt-2">{formatKES(totalCommission)}</div>
+          <span className="text-[11px] font-semibold text-indigo-700">7% platform earnings</span>
+        </div>
+
+        <div className="rounded-3xl border border-emerald-200 bg-emerald-50/50 p-6 shadow-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
+            Landlord Share (93%)
+          </span>
+          <div className="text-2xl font-black text-emerald-700 mt-2">{formatKES(landlordShare)}</div>
+          <span className="text-[11px] font-semibold text-emerald-800">Disbursable to landlords</span>
+        </div>
+
+        <div className="rounded-3xl border border-amber-200 bg-amber-50/50 p-6 shadow-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
+            Total Refunds Processed
+          </span>
+          <div className="text-2xl font-black text-amber-700 mt-2">{formatKES(totals.refundedAmount)}</div>
+          <span className="text-[11px] font-semibold text-amber-800">{totals.refundCount} refunds ({formatKES(totals.retentionAmount)} fee retained)</span>
+        </div>
+      </div>
+
+      {/* Platform Rates Policy Banner */}
+      <div className="rounded-3xl border border-slate-200 bg-slate-900 text-white p-6 shadow-md flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-1">
+          <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-400 px-3 py-1 rounded-full border border-indigo-500/30">
+            Active System Rates & Policies
+          </span>
+          <h4 className="text-base font-black tracking-tight mt-1">Platform Financial Configuration</h4>
+          <p className="text-xs text-slate-400">
+            Automated calculations applied on all student housing bookings and M-Pesa disbursements.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700 text-center">
+            <span className="block text-[10px] uppercase font-bold text-slate-400">Commission</span>
+            <span className="text-lg font-black text-indigo-400">7%</span>
           </div>
-          <span className="text-[11px] font-semibold text-emerald-800">Direct student deposits & rent</span>
+          <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700 text-center">
+            <span className="block text-[10px] uppercase font-bold text-slate-400">Landlord Payout</span>
+            <span className="text-lg font-black text-emerald-400">93%</span>
+          </div>
+          <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700 text-center">
+            <span className="block text-[10px] uppercase font-bold text-slate-400">Refund Return</span>
+            <span className="text-lg font-black text-amber-400">95%</span>
+          </div>
+          <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700 text-center">
+            <span className="block text-[10px] uppercase font-bold text-slate-400">Refund Retention</span>
+            <span className="text-lg font-black text-rose-400">5%</span>
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Payment
+from .models import Payment, LandlordPayout
 from .utils import normalize_phone_number
 
 
@@ -56,6 +56,37 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     def get_landlord_name(self, obj):
         landlord = obj.booking.property.landlord
+        return (
+            getattr(landlord, "get_full_name", lambda: None)()
+            or getattr(landlord, "full_name", None)
+            or landlord.username
+        )
+
+
+class LandlordPayoutSerializer(serializers.ModelSerializer):
+    landlord_name = serializers.SerializerMethodField()
+    property_title = serializers.CharField(source="property.title", read_only=True)
+
+    class Meta:
+        model = LandlordPayout
+        fields = [
+            "id",
+            "landlord",
+            "landlord_name",
+            "property",
+            "property_title",
+            "amount",
+            "phone_number",
+            "status",
+            "mpesa_receipt_number",
+            "conversation_id",
+            "result_desc",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_landlord_name(self, obj):
+        landlord = obj.landlord
         return (
             getattr(landlord, "get_full_name", lambda: None)()
             or getattr(landlord, "full_name", None)

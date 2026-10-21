@@ -1,5 +1,6 @@
 import logging
-
+from decimal import Decimal
+from django.utils import timezone
 from django.db import transaction
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
@@ -9,9 +10,9 @@ from apps.bookings.models import Booking
 from apps.properties.permissions import IsAdmin
 
 from .mpesa_client import MpesaClient
-from .models import Payment
-from .serializers import InitiatePaymentSerializer, PaymentSerializer
-from .utils import calculate_rent_total
+from .models import Payment, LandlordPayout
+from .serializers import InitiatePaymentSerializer, PaymentSerializer, LandlordPayoutSerializer
+from .utils import calculate_rent_total, normalize_phone_number
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,6 @@ class InitiateSTKPushView(APIView):
         property_obj = booking.property
         phase = data.get("phase") or "RENT"
 
-        # Calculate minimum required amount based on property deposit settings
         pct = property_obj.deposit_percentage or 100
         min_amount = (Decimal(str(property_obj.semester_rent)) * Decimal(str(pct)) / Decimal("100")).quantize(Decimal("0.01"))
         full_rent = Decimal(str(property_obj.semester_rent)) * Decimal(str(booking.duration_semesters))
@@ -61,7 +61,7 @@ class InitiateSTKPushView(APIView):
             amount = Decimal(str(requested_amount))
             if amount < min_amount:
                 return Response(
-                    {"detail": f"Amount cannot be less than the required minimum ({pct}% deposit: {min_amount}). You may pay more up to full rent ({full_rent})."},
+                    {"detail": f"Amount cannot be less than the required minimum ({pct}% deposit: {min_amount}). You may pay more up to full rent ({full_rent})."}, 
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         else:
@@ -95,9 +95,6 @@ class InitiateSTKPushView(APIView):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        # ResponseCode "0" means Safaricom accepted the push request (not
-        # that the customer has paid yet — that confirmation comes later
-        # via the callback).
         if mpesa_response.get("ResponseCode") != "0":
             payment.status = Payment.PaymentStatus.FAILED
             payment.result_desc = mpesa_response.get("ResponseDescription", "")
@@ -119,8 +116,6 @@ class InitiateSTKPushView(APIView):
 
 
 class PaymentStatusView(APIView):
-    """Polled by the frontend after an STK push while waiting for the
-    async callback to arrive."""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, checkout_request_id):
@@ -135,11 +130,6 @@ class PaymentStatusView(APIView):
 
 
 class MpesaCallbackView(APIView):
-    """
-    Safaricom calls this URL directly — it is NOT authenticated by our
-    own auth system, since Safaricom's servers can't hold a user token.
-    Do not add IsAuthenticated here.
-    """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -162,8 +152,6 @@ class MpesaCallbackView(APIView):
             )
         except Payment.DoesNotExist:
             logger.error("No matching Payment for CheckoutRequestID=%s", checkout_request_id)
-            # Still return success to Safaricom — this isn't their problem,
-            # and retrying won't fix a payment record that doesn't exist.
             return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
 
         with transaction.atomic():
@@ -171,8 +159,6 @@ class MpesaCallbackView(APIView):
             payment.result_desc = result_desc
 
             if result_code == 0:
-                # Successful payment — extract the receipt number and
-                # transaction date from the metadata items Safaricom sends.
                 metadata_items = (
                     stk_callback.get("CallbackMetadata", {}).get("Item", [])
                 )
@@ -183,7 +169,6 @@ class MpesaCallbackView(APIView):
 
                 raw_date = metadata.get("TransactionDate")
                 if raw_date:
-                    # Safaricom sends this as YYYYMMDDHHMMSS (integer)
                     from datetime import datetime
                     payment.transaction_date = datetime.strptime(str(raw_date), "%Y%m%d%H%M%S")
 
@@ -202,20 +187,13 @@ class MpesaCallbackView(APIView):
                         prop.save()
 
             else:
-                # User cancelled, insufficient funds, timeout, etc.
                 payment.status = Payment.PaymentStatus.FAILED
                 payment.save()
 
-        # Safaricom expects this exact acknowledgement shape regardless
-        # of the payment outcome — it just confirms we received the callback.
         return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
 
 
 class LandlordPaymentsView(generics.ListAPIView):
-    """
-    Lists all payments across the landlord's properties, so they can see
-    which students have paid deposits/rent and which are still pending.
-    """
     serializer_class = PaymentSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -235,12 +213,35 @@ class LandlordPaymentsView(generics.ListAPIView):
         return qs
 
 
+class LandlordPayoutsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if getattr(user, "role", None) != "LANDLORD":
+            return Response({"detail": "Only landlords can access payout records."}, status=status.HTTP_403_FORBIDDEN)
+
+        payouts = LandlordPayout.objects.filter(landlord=user)
+        payments = Payment.objects.filter(booking__property__landlord=user, status=Payment.PaymentStatus.COMPLETED)
+
+        total_collected = sum([p.amount for p in payments], Decimal("0.00"))
+        platform_commission = (total_collected * Decimal("0.07")).quantize(Decimal("0.01"))
+        landlord_entitlement = (total_collected * Decimal("0.93")).quantize(Decimal("0.01"))
+
+        total_paid_out = sum([p.amount for p in payouts if p.status == LandlordPayout.Status.COMPLETED], Decimal("0.00"))
+        pending_payout = landlord_entitlement - total_paid_out
+
+        return Response({
+            "total_collected": str(total_collected),
+            "platform_commission": str(platform_commission),
+            "landlord_entitlement": str(landlord_entitlement),
+            "total_paid_out": str(total_paid_out),
+            "pending_payout": str(max(Decimal("0.00"), pending_payout)),
+            "payouts": LandlordPayoutSerializer(payouts, many=True).data
+        })
+
+
 class AdminPaymentsView(generics.ListAPIView):
-    """
-    Lists every payment platform-wide, for admin oversight. Supports
-    optional filtering by property, landlord, or payment status so an
-    admin can drill into a specific property/landlord's collections.
-    """
     serializer_class = PaymentSerializer
     permission_classes = [IsAdmin]
 
@@ -269,10 +270,6 @@ class AdminPaymentsView(generics.ListAPIView):
 
 
 class AdminProcessRefundView(APIView):
-    """
-    Admin approves and processes a 95% refund (retaining a 5% administrative fee)
-    via Safaricom M-Pesa B2C payout API.
-    """
     permission_classes = [IsAdmin]
 
     def post(self, request, pk):
@@ -294,7 +291,7 @@ class AdminProcessRefundView(APIView):
             )
 
         reason = request.data.get("reason", "Student housing booking cancellation refund.")
-        
+
         amount = payment.amount
         retention_fee = (amount * Decimal("0.05")).quantize(Decimal("0.01"))
         refund_amount = (amount * Decimal("0.95")).quantize(Decimal("0.01"))
@@ -337,3 +334,130 @@ class AdminProcessRefundView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class AdminLandlordPayoutView(APIView):
+    """
+    Admin triggers an M-Pesa B2C payout to a landlord.
+    """
+    permission_classes = [IsAdmin]
+
+    def post(self, request):
+        landlord_id = request.data.get("landlord_id")
+        amount = request.data.get("amount")
+        phone_number = request.data.get("phone_number")
+        property_id = request.data.get("property_id")
+        remarks = request.data.get("remarks", "Landlord Rent Payout")
+
+        if not landlord_id or not amount or not phone_number:
+            return Response({"detail": "landlord_id, amount, and phone_number are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            norm_phone = normalize_phone_number(phone_number)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            from apps.accounts.models import User
+            landlord = User.objects.get(pk=landlord_id, role="LANDLORD")
+        except User.DoesNotExist:
+            return Response({"detail": "Landlord user not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        payout_amount = Decimal(str(amount))
+        if payout_amount <= 0:
+            return Response({"detail": "Payout amount must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = MpesaClient()
+        try:
+            b2c_res = client.b2c_payment(
+                phone_number=norm_phone,
+                amount=payout_amount,
+                remarks=remarks,
+                occasion=f"Landlord#{landlord_id} Payout"
+            )
+        except Exception as exc:
+            logger.exception("M-Pesa B2C landlord payout failed")
+            return Response(
+                {"detail": f"Failed to execute M-Pesa B2C payout: {str(exc)}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        conversation_id = b2c_res.get("ConversationID", "")
+        originator_conversation_id = b2c_res.get("OriginatorConversationID", "")
+        response_code = b2c_res.get("ResponseCode", "1")
+
+        status_val = LandlordPayout.Status.COMPLETED if response_code == "0" else LandlordPayout.Status.PENDING
+
+        payout = LandlordPayout.objects.create(
+            landlord=landlord,
+            property_id=property_id if property_id else None,
+            amount=payout_amount,
+            phone_number=norm_phone,
+            status=status_val,
+            conversation_id=conversation_id,
+            originator_conversation_id=originator_conversation_id,
+            result_desc=b2c_res.get("ResponseDescription", "Payout initiated")
+        )
+
+        return Response({
+            "detail": "M-Pesa B2C landlord payout initiated successfully.",
+            "payout": LandlordPayoutSerializer(payout).data,
+            "b2c_response": b2c_res,
+        }, status=status.HTTP_200_OK)
+
+
+class AdminAccountBalanceView(APIView):
+    """
+    Queries M-Pesa Account Balance via B2C/AccountBalance API.
+    """
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        client = MpesaClient()
+        initiator = getattr(settings, "MPESA_INITIATOR_NAME", "testinitiator")
+        security_credential = getattr(settings, "MPESA_SECURITY_CREDENTIAL", "")
+        result_url = getattr(settings, "MPESA_CALLBACK_URL", "https://api.safaricom.co.ke/mpesa")
+        queue_timeout_url = result_url
+
+        try:
+            res = client.account_balance(
+                initiator=initiator,
+                security_credential=security_credential,
+                result_url=result_url,
+                queue_timeout_url=queue_timeout_url,
+            )
+            return Response(res, status=status.HTTP_200_OK)
+        except Exception as exc:
+            logger.exception("Account balance query failed")
+            return Response({"detail": f"Failed to query account balance: {str(exc)}"}, status=status.HTTP_502_BAD_GATEWAY)
+
+
+class AdminTransactionStatusView(APIView):
+    """
+    Queries M-Pesa Transaction Status.
+    """
+    permission_classes = [IsAdmin]
+
+    def post(self, request):
+        transaction_id = request.data.get("transaction_id")
+        if not transaction_id:
+            return Response({"detail": "transaction_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = MpesaClient()
+        initiator = getattr(settings, "MPESA_INITIATOR_NAME", "testinitiator")
+        security_credential = getattr(settings, "MPESA_SECURITY_CREDENTIAL", "")
+        result_url = getattr(settings, "MPESA_CALLBACK_URL", "https://api.safaricom.co.ke/mpesa")
+        queue_timeout_url = result_url
+
+        try:
+            res = client.transaction_status(
+                transaction_id=transaction_id,
+                initiator=initiator,
+                security_credential=security_credential,
+                result_url=result_url,
+                queue_timeout_url=queue_timeout_url,
+            )
+            return Response(res, status=status.HTTP_200_OK)
+        except Exception as exc:
+            logger.exception("Transaction status query failed")
+            return Response({"detail": f"Failed to query transaction status: {str(exc)}"}, status=status.HTTP_502_BAD_GATEWAY)

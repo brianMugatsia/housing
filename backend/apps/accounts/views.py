@@ -1,4 +1,7 @@
 import random
+from datetime import timedelta
+from django.utils import timezone
+from django.conf import settings
 from django.core.mail import send_mail
 from django.contrib.auth import get_user_model
 from rest_framework import generics, permissions, status
@@ -72,10 +75,10 @@ class ForgotPasswordView(APIView):
         except Exception:
             pass
 
-        return Response({
-            "detail": "OTP sent to email.",
-            "dev_otp": otp_code
-        }, status=status.HTTP_200_OK)
+        response_data = {"detail": "OTP sent to email."}
+        if settings.DEBUG:
+            response_data["dev_otp"] = otp_code
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 class ResetPasswordWithOTPView(APIView):
@@ -94,7 +97,14 @@ class ResetPasswordWithOTPView(APIView):
         except User.DoesNotExist:
             return Response({"detail": "Invalid email or OTP."}, status=status.HTTP_400_BAD_REQUEST)
 
-        otp_obj = PasswordOTP.objects.filter(user=user, otp_code=otp_code, is_used=False).order_by("-created_at").first()
+        expiry_time = timezone.now() - timedelta(minutes=15)
+        otp_obj = PasswordOTP.objects.filter(
+            user=user, 
+            otp_code=otp_code, 
+            is_used=False,
+            created_at__gte=expiry_time
+        ).order_by("-created_at").first()
+
         if not otp_obj:
             return Response({"detail": "Invalid or expired OTP code."}, status=status.HTTP_400_BAD_REQUEST)
 
