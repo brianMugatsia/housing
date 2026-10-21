@@ -272,7 +272,7 @@ export default function StudentDashboard() {
                               Move-in: <strong className="text-slate-700">{booking.move_in_date || "Flexible"}</strong>
                             </span>
                             <span className="text-slate-400">
-                              ({booking.duration_months || 1} months contract)
+                              ({booking.duration_semesters || 1} semester{booking.duration_semesters > 1 ? "s" : ""})
                             </span>
                           </div>
 

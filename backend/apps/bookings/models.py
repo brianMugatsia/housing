@@ -25,9 +25,9 @@ class Booking(models.Model):
         on_delete=models.CASCADE,
         related_name='bookings'
     )
-    house_number = models.CharField(max_length=50, blank=True, default="")
+    house_number = models.CharField(max_length=50, blank=True, default="")  
     move_in_date = models.DateField()
-    duration_months = models.IntegerField(default=12)
+    duration_semesters = models.IntegerField(default=1)
     notes = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     

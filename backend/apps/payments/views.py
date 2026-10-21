@@ -51,9 +51,23 @@ class InitiateSTKPushView(APIView):
         property_obj = booking.property
         phase = data.get("phase") or "RENT"
 
-        # Calculate full rent amount for the student's stay
-        amount = calculate_rent_total(property_obj.semester_rent, booking.duration_months)
-        description = f"Full Rent BK{booking.id}"
+        # Calculate minimum required amount based on property deposit settings
+        pct = property_obj.deposit_percentage or 100
+        min_amount = (Decimal(str(property_obj.semester_rent)) * Decimal(str(pct)) / Decimal("100")).quantize(Decimal("0.01"))
+        full_rent = Decimal(str(property_obj.semester_rent)) * Decimal(str(booking.duration_semesters))
+
+        requested_amount = data.get("amount")
+        if requested_amount is not None:
+            amount = Decimal(str(requested_amount))
+            if amount < min_amount:
+                return Response(
+                    {"detail": f"Amount cannot be less than the required minimum ({pct}% deposit: {min_amount}). You may pay more up to full rent ({full_rent})."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            amount = min_amount
+
+        description = f"Rent/Deposit BK{booking.id}"
 
         payment = Payment.objects.create(
             booking=booking,
@@ -178,6 +192,14 @@ class MpesaCallbackView(APIView):
                 booking = payment.booking
                 booking.status = "CONFIRMED"
                 booking.save()
+
+                prop = booking.property
+                room_num = booking.house_number
+                if room_num and hasattr(prop, 'available_room_numbers') and isinstance(prop.available_room_numbers, list):
+                    if room_num in prop.available_room_numbers:
+                        prop.available_room_numbers.remove(room_num)
+                        prop.available_rooms = max(0, len(prop.available_room_numbers))
+                        prop.save()
 
             else:
                 # User cancelled, insufficient funds, timeout, etc.

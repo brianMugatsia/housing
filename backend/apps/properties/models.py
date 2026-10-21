@@ -71,6 +71,9 @@ class Property(models.Model):
     semester_rent = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     deposit = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], default=0)
 
+    accepts_deposit = models.BooleanField(default=False)
+    accepts_full_amount = models.BooleanField(default=True)
+
     class DepositPercentage(models.IntegerChoices):
         FULL = 100, "Full Payment (100%)"
         QUARTER = 25, "25% Deposit"
@@ -78,7 +81,7 @@ class Property(models.Model):
         THREE_QUARTERS = 75, "75% Deposit"
 
     deposit_percentage = models.IntegerField(
-        choices=DepositPercentage.choices, default=DepositPercentage.FULL
+        choices=DepositPercentage.choices, default=DepositPercentage.FULL   
     )
 
     total_rooms = models.PositiveIntegerField(validators=[MinValueValidator(1)])

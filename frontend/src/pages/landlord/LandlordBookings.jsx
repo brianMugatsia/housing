@@ -269,7 +269,7 @@ export default function LandlordBookings() {
                         <div>
                           <span className="block text-[10px] font-bold uppercase text-slate-400">Move-in Date</span>
                           <span className="font-extrabold text-slate-900 text-sm">{booking.move_in_date || "Flexible"}</span>
-                          <span className="block text-[11px] text-slate-500 font-medium">{booking.duration_months || 1} months duration</span>
+                          <span className="block text-[11px] text-slate-500 font-medium">{booking.duration_semesters || 1} semester{booking.duration_semesters > 1 ? "s" : ""}</span>
                         </div>
                       </div>
 

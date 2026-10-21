@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
-   
   MapPin, 
   CheckCircle2, 
   AlertCircle, 
@@ -10,13 +9,10 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 
-// Maps the stored duration_months value to how many semesters that represents,
-// so total price = semester rent * semesters. Adjust the "12" mapping if your
-// academic calendar uses 2 semesters/year instead of 3 trimesters/year.
 const DURATION_OPTIONS = [
-  { value: "3", label: "1 Semester", semesters: 1 },
-  { value: "6", label: "2 Semesters", semesters: 2 },
-  { value: "12", label: "1 Full Academic Year", semesters: 3 },
+  { value: "1", label: "1 Semester", semesters: 1 },
+  { value: "2", label: "2 Semesters", semesters: 2 },
+  { value: "3", label: "3 Semesters", semesters: 3 },
 ];
 
 export default function BookingPage() {
@@ -34,7 +30,7 @@ export default function BookingPage() {
   const [formData, setFormData] = useState({
     house_number: "",
     move_in_date: "",
-    duration_months: "12",
+    duration_semesters: "1",
     notes: "",
   });
 
@@ -64,13 +60,11 @@ export default function BookingPage() {
     };
   }, [houseId]);
 
-  // Read landlord's selections
   const getAvailableRooms = () => {
     if (!property) return [];
 
     let raw = property.available_room_numbers || property.room_numbers || [];
 
-    // Parse JSON string if sent as a raw string
     if (typeof raw === "string") {
       try {
         raw = JSON.parse(raw);
@@ -95,9 +89,8 @@ export default function BookingPage() {
 
   const availableRoomsList = getAvailableRooms();
 
-  // Live price calculation based on selected duration
   const selectedDuration = DURATION_OPTIONS.find(
-    (d) => d.value === formData.duration_months
+    (d) => d.value === formData.duration_semesters
   ) || DURATION_OPTIONS[0];
 
   const semesterRent = Number(property?.semester_rent) || 0;
@@ -113,7 +106,7 @@ export default function BookingPage() {
         property: parseInt(houseId, 10),
         house_number: formData.house_number,
         move_in_date: formData.move_in_date,
-        duration_months: parseInt(formData.duration_months, 10),
+        duration_semesters: parseInt(formData.duration_semesters, 10),
         notes: formData.notes,
       });
 
@@ -232,12 +225,12 @@ export default function BookingPage() {
 
                 <div>
                   <label className="block text-xs font-semibold uppercase text-slate-600 mb-1.5">
-                    Lease Duration
+                    Lease Duration (Semesters)
                   </label>
                   <select
-                    value={formData.duration_months}
+                    value={formData.duration_semesters}
                     onChange={(e) =>
-                      setFormData({ ...formData, duration_months: e.target.value })
+                      setFormData({ ...formData, duration_semesters: e.target.value })
                     }
                     className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-slate-900 bg-white"
                   >
@@ -286,7 +279,7 @@ export default function BookingPage() {
         <div>
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-base font-bold text-slate-900 mb-4">Property Summary</h2>
-            
+
             {property && (
               <div className="space-y-4">
                 <div>

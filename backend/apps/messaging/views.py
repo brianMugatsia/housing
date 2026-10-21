@@ -12,11 +12,13 @@ class MessageListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         user = self.request.user
         other_user_id = self.request.query_params.get("user_id")
-        qs = Message.objects.filter(Q(sender=user) | Q(recipient=user))
+        qs = Message.objects.filter(Q(sender=user) | Q(recipient=user))     
         if other_user_id:
             qs = qs.filter(
-                Q(sender_id=other_user_id) | Q(recipient_id=other_user_id)
+                Q(sender_id=other_user_id) | Q(recipient_id=other_user_id)  
             )
+            # Mark incoming messages from this user as read when retrieved
+            Message.objects.filter(sender_id=other_user_id, recipient=user, is_read=False).update(is_read=True)
         return qs.select_related("sender", "recipient", "property")
 
     def perform_create(self, serializer):
@@ -31,7 +33,7 @@ class ConversationListView(generics.GenericAPIView):
         sent_to = Message.objects.filter(sender=user).values_list(
             "recipient", flat=True
         )
-        received_from = Message.objects.filter(recipient=user).values_list(
+        received_from = Message.objects.filter(recipient=user).values_list( 
             "sender", flat=True
         )
         user_ids = set(list(sent_to) + list(received_from))
@@ -49,12 +51,14 @@ class ConversationListView(generics.GenericAPIView):
                 .order_by("-created_at")
                 .first()
             )
+            has_unread = Message.objects.filter(sender=u, recipient=user, is_read=False).exists()
             data.append(
                 {
                     "user_id": u.id,
                     "full_name": u.full_name,
                     "role": u.role,
-                    "last_message": MessageSerializer(last_msg).data
+                    "has_unread": has_unread,
+                    "last_message": MessageSerializer(last_msg).data        
                     if last_msg
                     else None,
                 }

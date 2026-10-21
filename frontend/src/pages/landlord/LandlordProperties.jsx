@@ -173,16 +173,24 @@ export default function LandlordProperties() {
                       </p>
                     )}
 
-                    {canSubmit && (
-                      <button
-                        onClick={() => handleSubmitForReview(p.id)}
-                        disabled={submittingId === p.id}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-900 text-white rounded-2xl text-xs font-bold hover:bg-slate-800 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/landlord/properties/${p.id}`}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-100 text-slate-800 rounded-2xl text-xs font-bold hover:bg-slate-200 transition-colors cursor-pointer shadow-sm"
                       >
-                        <Send className="h-3.5 w-3.5" />
-                        {submittingId === p.id ? "Submitting..." : "Submit for Admin Review"}
-                      </button>
-                    )}
+                        Edit Property
+                      </Link>
+                      {canSubmit && (
+                        <button
+                          onClick={() => handleSubmitForReview(p.id)}
+                          disabled={submittingId === p.id}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-900 text-white rounded-2xl text-xs font-bold hover:bg-slate-800 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          {submittingId === p.id ? "Submitting..." : "Submit"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

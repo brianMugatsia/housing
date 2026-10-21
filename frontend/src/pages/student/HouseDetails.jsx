@@ -35,7 +35,7 @@ export default function HouseDetails() {
 
   // Booking Form State
   const [moveInDate, setMoveInDate] = useState("");
-  const [durationMonths, setDurationMonths] = useState(1);
+  const [durationSemesters, setDurationSemesters] = useState("1");
   const [selectedRoom, setSelectedRoom] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -90,7 +90,7 @@ export default function HouseDetails() {
         property: house.id,
         house_number: selectedRoom,
         move_in_date: moveInDate,
-        duration_months: Number(durationMonths),
+        duration_semesters: parseInt(durationSemesters, 10),
         notes: notes,
       });
 
@@ -267,12 +267,17 @@ export default function HouseDetails() {
             <div className="border-b border-slate-100 pb-4">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Reserve Unit</span>
               <div className="flex items-baseline justify-between mt-1">
-                <span className="text-3xl font-black text-slate-900">       
-                  KES {Number(house.semester_rent || 0).toLocaleString()}    
-                </span>
+                <div>
+                  <span className="text-3xl font-black text-slate-900">
+                    KES {(Number(house.semester_rent || 0) * Number(durationSemesters || 1)).toLocaleString()}
+                  </span>
+                  <span className="block text-[11px] font-semibold text-slate-500 mt-0.5">
+                    ({durationSemesters} semester{Number(durationSemesters) > 1 ? "s" : ""} @ KES {Number(house.semester_rent || 0).toLocaleString()} each)
+                  </span>
+                </div>
                 <span className={`text-xs font-bold px-3 py-1 rounded-full ${
-                  house.available_rooms > 0 
-                    ? "text-emerald-700 bg-emerald-50 border border-emerald-200" 
+                  house.available_rooms > 0
+                    ? "text-emerald-700 bg-emerald-50 border border-emerald-200"
                     : "text-rose-700 bg-rose-50 border border-rose-200"
                 }`}>
                   {house.available_rooms > 0 ? `${house.available_rooms} units left` : "Fully booked"}
@@ -330,17 +335,17 @@ export default function HouseDetails() {
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                  Duration (Months)
+                  Duration (Semesters)
                 </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="24"
-                  required
-                  value={durationMonths}
-                  onChange={(e) => setDurationMonths(e.target.value)}
+                <select
+                  value={durationSemesters}
+                  onChange={(e) => setDurationSemesters(e.target.value)}
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-900 bg-white focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 shadow-sm"
-                />
+                >
+                  <option value="1">1 Semester</option>
+                  <option value="2">2 Semesters</option>
+                  <option value="3">3 Semesters</option>
+                </select>
               </div>
 
               <div>

@@ -6,8 +6,10 @@ from apps.properties.serializers import PropertySerializer
 
 class BookingSerializer(serializers.ModelSerializer):
     property_details = PropertySerializer(source='property', read_only=True)
-    student_name = serializers.CharField(source='student.get_full_name', read_only=True)
-    student_phone = serializers.CharField(source='student.phone_number', read_only=True)
+    student_name = serializers.CharField(source='student.full_name', read_only=True)
+    student_phone = serializers.CharField(source='student.phone', read_only=True)
+    landlord_name = serializers.CharField(source='property.landlord.full_name', read_only=True)
+    landlord_phone = serializers.CharField(source='property.landlord.phone', read_only=True)
 
     class Meta:
         model = Booking
@@ -16,11 +18,13 @@ class BookingSerializer(serializers.ModelSerializer):
             'student',
             'student_name',
             'student_phone',
+            'landlord_name',
+            'landlord_phone',
             'property',
             'property_details',
             'house_number',
             'move_in_date',
-            'duration_months',
+            'duration_semesters',
             'notes',
             'status',
             'tenant_signature',

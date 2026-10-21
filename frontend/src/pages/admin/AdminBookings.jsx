@@ -302,7 +302,12 @@ export default function AdminBookings() {
                         <div>
                           <span className="block text-[10px] font-bold uppercase text-slate-400">Property Host</span>
                           <span className="font-extrabold text-slate-900 text-sm">{landlordInfo}</span>
-                          <span className="text-[11px] text-slate-400 font-medium">Rent: {formatKES(booking.property_details?.semester_rent || 0)}</span>
+                          {booking.landlord_phone && (
+                            <a href={`tel:${booking.landlord_phone}`} className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:underline">
+                              <Phone className="h-3 w-3" /> {booking.landlord_phone}
+                            </a>
+                          )}
+                          <span className="block text-[11px] text-slate-400 font-medium">Rent: {formatKES(booking.property_details?.semester_rent || 0)}</span>
                         </div>
                       </div>
 
@@ -314,7 +319,7 @@ export default function AdminBookings() {
                         <div>
                           <span className="block text-[10px] font-bold uppercase text-slate-400">Timeline & Stay</span>
                           <span className="font-extrabold text-slate-900 text-sm">{booking.move_in_date || "Flexible"}</span>
-                          <span className="text-[11px] text-slate-500 font-medium">{booking.duration_months || 1} months contract</span>
+                          <span className="text-[11px] text-slate-500 font-medium">{booking.duration_semesters || 1} semester{booking.duration_semesters > 1 ? "s" : ""}</span>
                         </div>
                       </div>
                     </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { 
   Building2, 
   MapPin, 
@@ -41,6 +41,8 @@ const AMENITIES_LIST = [
 
 export default function AddProperty() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEditing = Boolean(id);
   const uniDropdownRef = useRef(null);
 
   // Navigation & UI States
@@ -68,6 +70,8 @@ export default function AddProperty() {
     town: "",
     address: "",
     semester_rent: "",
+    accepts_deposit: false,
+    deposit_percentage: 50,
     amenities: [],
   });
 
@@ -78,6 +82,53 @@ export default function AddProperty() {
   // Image Upload States
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
+
+  useEffect(() => {
+    fetchUniversities();
+    if (isEditing) {
+      const fetchProperty = async () => {
+        setLoading(true);
+        try {
+          const res = await api.get(`properties/${id}/`);
+          const p = res.data;
+          setFormData({
+            title: p.title || "",
+            property_type: p.property_type || "BEDSITTER",
+            room_type: p.room_type || "SINGLE_OCCUPANCY",
+            gender_restriction: p.gender_restriction || "NONE",
+            description: p.description || "",
+            university: p.university?.id || p.university || "",
+            county: p.county || "",
+            town: p.town || "",
+            address: p.address || "",
+            semester_rent: p.semester_rent || "",
+            accepts_deposit: p.accepts_deposit || false,
+            deposit_percentage: p.deposit_percentage || 50,
+            amenities: Array.isArray(p.amenities) ? p.amenities.map(a => a.name || a) : [],
+          });
+          if (p.total_rooms) setTotalUnits(p.total_rooms);
+          if (Array.isArray(p.available_room_numbers)) {
+            const nums = p.available_room_numbers.map(label => {
+              const match = String(label).match(/\d+/);
+              return match ? parseInt(match[0], 10) : 1;
+            });
+            setSelectedUnits(nums);
+          } else if (p.available_rooms) {
+            setSelectedUnits(Array.from({ length: p.available_rooms }, (_, i) => i + 1));
+          }
+          if (Array.isArray(p.images)) {
+            setImagePreviews(p.images.map(img => img.image));
+          }
+        } catch (err) {
+          console.error("Failed to load property for editing:", err);
+          setError("Failed to load property details for editing.");
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchProperty();
+    }
+  }, [id, isEditing]);
 
   // Fetch Universities
   const fetchUniversities = async () => {
@@ -246,6 +297,8 @@ export default function AddProperty() {
       payload.append("town", formData.town.trim());
       payload.append("address", formData.address.trim());
       payload.append("semester_rent", formData.semester_rent);
+      payload.append("accepts_deposit", formData.accepts_deposit ? "true" : "false");
+      payload.append("deposit_percentage", formData.accepts_deposit ? formData.deposit_percentage : 100);
       payload.append("deposit", 0);
 
       // Quantities matching Property model fields
@@ -264,26 +317,31 @@ export default function AddProperty() {
         payload.append("uploaded_images", file);
       });
 
-      // Step 1: Create the property (lands as DRAFT on the backend)
-      const createRes = await api.post("properties/", payload, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
+      let propertyId = id;
+      if (isEditing) {
+        await api.put(`properties/${id}/`, payload, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+      } else {
+        const createRes = await api.post("properties/", payload, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+        propertyId = createRes.data?.id;
 
-      const newPropertyId = createRes.data?.id;
-
-      // Step 2: Immediately submit it for admin review, since photos
-      // were already attached in the same request. This moves it from
-      // DRAFT -> PENDING_VERIFICATION so it shows correctly in "My
-      // Properties" and in the admin dashboard's Pending queue.
-      if (newPropertyId) {
-        try {
-          await api.post(`properties/${newPropertyId}/submit/`);
-        } catch (submitErr) {
-          console.error("Property created but failed to submit for review:", submitErr);
-          setSubmitWarning(
-            "Your listing was saved, but we couldn't automatically send it for review. " +
-            "Please open it from 'My Properties' and submit it for verification."
-          );
+        // Step 2: Immediately submit it for admin review, since photos  
+        // were already attached in the same request. This moves it from 
+        // DRAFT -> PENDING_VERIFICATION so it shows correctly in "My    
+        // Properties" and in the admin dashboard's Pending queue.       
+        if (propertyId) {
+          try {
+            await api.post(`properties/${propertyId}/submit/`);       
+          } catch (submitErr) {
+            console.error("Property created but failed to submit for review:", submitErr);
+            setSubmitWarning(
+              "Your listing was saved, but we couldn't automatically send it for review. " +
+              "Please open it from 'My Properties' and submit it for verification."
+            );
+          }
         }
       }
 
@@ -578,7 +636,70 @@ export default function AddProperty() {
                   placeholder="30000"
                   className="w-full p-3 bg-slate-50/50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
-                <p className="mt-1.5 text-xs text-slate-500 font-medium">Students pay this full amount directly upon approval (no separate deposit required).</p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 space-y-3">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  PAYMENT TERMS & DEPOSIT
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, accepts_deposit: false, deposit_percentage: 100 })}
+                    className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
+                      !formData.accepts_deposit
+                        ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                        : "bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <span className="block font-black text-xs">Full Payment Only</span>
+                    <span className={`block text-[11px] mt-0.5 ${!formData.accepts_deposit ? "text-slate-300" : "text-slate-500"}`}>
+                      Student pays full semester rent upfront upon approval.
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, accepts_deposit: true, deposit_percentage: formData.deposit_percentage || 50 })}
+                    className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
+                      formData.accepts_deposit
+                        ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                        : "bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <span className="block font-black text-xs">Accept Deposit</span>
+                    <span className={`block text-[11px] mt-0.5 ${formData.accepts_deposit ? "text-slate-300" : "text-slate-500"}`}>
+                      Allow student to pay a partial deposit percentage first.
+                    </span>
+                  </button>
+                </div>
+
+                {formData.accepts_deposit && (
+                  <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Select Required Deposit Percentage
+                    </label>
+                    <div className="flex gap-3">
+                      {[25, 50, 75].map((pct) => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deposit_percentage: pct })}
+                          className={`flex-1 py-2.5 rounded-lg border text-xs font-black transition-all cursor-pointer ${
+                            Number(formData.deposit_percentage) === pct
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          {pct}% Deposit
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Student must pay at least {formData.deposit_percentage}% (KES {Math.round((Number(formData.semester_rent) || 0) * formData.deposit_percentage / 100).toLocaleString()}) upon booking approval, and can pay more up to full rent.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="pt-2">

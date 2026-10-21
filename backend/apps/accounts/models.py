@@ -78,3 +78,13 @@ class LandlordProfile(models.Model):
 
     def __str__(self):
         return f"Landlord: {self.user.full_name}"
+
+
+class PasswordOTP(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otps")
+    otp_code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_used = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"OTP for {self.user.email}: {self.otp_code}"

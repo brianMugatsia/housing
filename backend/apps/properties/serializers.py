@@ -59,6 +59,8 @@ class PropertySerializer(serializers.ModelSerializer):
             "distance_from_university",
             "semester_rent",
             "deposit",
+            "accepts_deposit",
+            "accepts_full_amount",
             "deposit_percentage",
             "total_rooms",
             "available_rooms",
@@ -95,6 +97,8 @@ class PropertyWriteSerializer(serializers.ModelSerializer):
             "distance_from_university",
             "semester_rent",
             "deposit",
+            "accepts_deposit",
+            "accepts_full_amount",
             "deposit_percentage",
             "total_rooms",
             "available_rooms",
@@ -136,6 +140,28 @@ class PropertyWriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"available_rooms": "Available rooms cannot exceed total rooms."}
             )
+
+        accepts_deposit = data.get("accepts_deposit", getattr(self.instance, "accepts_deposit", False))
+        if isinstance(accepts_deposit, str):
+            accepts_deposit = accepts_deposit.lower() in ("true", "1", "yes")
+
+        data["accepts_deposit"] = bool(accepts_deposit)
+        data["accepts_full_amount"] = not bool(accepts_deposit)
+
+        accepts_full_amount = data["accepts_full_amount"]
+        deposit_percentage = data.get("deposit_percentage", getattr(self.instance, "deposit_percentage", 100))
+        if isinstance(deposit_percentage, str) and deposit_percentage.isdigit():
+            deposit_percentage = int(deposit_percentage)
+            data["deposit_percentage"] = deposit_percentage
+
+        if accepts_deposit:
+            if deposit_percentage not in [25, 50, 75]:
+                raise serializers.ValidationError(
+                    {"deposit_percentage": "Deposit percentage must be 25, 50, or 75 when accepting deposit."}
+                )
+        else:
+            data["deposit_percentage"] = 100
+
         return data
 
     @transaction.atomic
@@ -172,6 +198,8 @@ class PropertyWriteSerializer(serializers.ModelSerializer):
         critical_fields = {
             "semester_rent",
             "deposit",
+            "accepts_deposit",
+            "accepts_full_amount",
             "deposit_percentage",
             "total_rooms",
             "available_rooms",
